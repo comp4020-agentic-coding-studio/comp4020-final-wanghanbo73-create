@@ -17,6 +17,7 @@ export function adminDashboardPage(counts: DashboardCounts): string {
   <nav class="admin-nav">
     <a href="/admin/products">Manage products</a>
     <a href="/admin/orders">Manage orders</a>
+    <a href="/admin/admins/new">Create admin account</a>
   </nav>
   `;
 }

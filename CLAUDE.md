@@ -21,8 +21,9 @@ prompted it:
   re-reads the product and SKU from the database inside the transaction and
   recomputes the total server-side. A posted `role`, `price_cents`, or
   `per_account_limit` field is informational noise — discard it. `/register`
-  always inserts `role='customer'`; there is no HTTP path that creates an
-  admin account.
+  always inserts `role='customer'`; the only HTTP path that can create an
+  admin account is `POST /admin/admins`, gated behind `requireAdmin` — the
+  role is hardcoded server-side there too, never read from the request body.
 - **Purchase mutations are one synchronous `db.transaction(...)` call, no
   `await` inside it.** better-sqlite3 runs that transaction to completion on
   the single connection before touching anything else, which is the whole

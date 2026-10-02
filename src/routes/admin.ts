@@ -9,9 +9,11 @@ import { adminProductsPage } from "../views/admin/products.ts";
 import { productEditPage } from "../views/admin/product-edit.ts";
 import { adminOrdersPage } from "../views/admin/orders.ts";
 import type { AdminOrderRow } from "../views/admin/orders.ts";
-import type { Category, OrderItemRow, OrderRow, OrderStatus, ProductRow, SaleType, SkuRow } from "../types.ts";
+import { newAdminPage } from "../views/admin/new-admin.ts";
+import type { Category, OrderItemRow, OrderRow, OrderStatus, ProductRow, SaleType, SkuRow, UserRow } from "../types.ts";
 import { escapeHtml } from "../views/html.ts";
 import { recordOrderEvent } from "../notifications.ts";
+import { hashPassword } from "../auth.ts";
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -271,4 +273,46 @@ adminRouter.post("/orders/:id/status", (req, res) => {
     return;
   }
   res.redirect("/admin/orders");
+});
+
+adminRouter.get("/admins/new", (req, res) => {
+  render(req, res, "Create admin account", newAdminPage({ csrfToken: csrfToken(req) }));
+});
+
+adminRouter.post("/admins", (req, res) => {
+  const email = typeof req.body.email === "string" ? req.body.email.trim().toLowerCase() : "";
+  const password = typeof req.body.password === "string" ? req.body.password : "";
+
+  if (!email || !password || password.length < 8) {
+    render(
+      req,
+      res,
+      "Create admin account",
+      newAdminPage({ csrfToken: csrfToken(req), error: "Email and a password of at least 8 characters are required." }),
+      400,
+    );
+    return;
+  }
+
+  const existing = db.prepare<[string], UserRow>("SELECT * FROM users WHERE email = ?").get(email);
+  if (existing) {
+    render(
+      req,
+      res,
+      "Create admin account",
+      newAdminPage({ csrfToken: csrfToken(req), error: "An account with that email already exists." }),
+      409,
+    );
+    return;
+  }
+
+  // Role is hardcoded here, never read from the request body — this is the
+  // only HTTP path that creates an admin account, and it's gated by
+  // requireAdmin above.
+  db.prepare("INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'admin')").run(
+    email,
+    hashPassword(password),
+  );
+
+  res.redirect("/admin");
 });
