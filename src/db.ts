@@ -46,7 +46,7 @@ db.exec(`
   CREATE TABLE IF NOT EXISTS orders (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL REFERENCES users(id),
-    status TEXT NOT NULL CHECK (status IN ('confirmed','ready_for_pickup','completed')) DEFAULT 'confirmed',
+    status TEXT NOT NULL CHECK (status IN ('confirmed','ready_for_pickup','completed','cancelled')) DEFAULT 'confirmed',
     idempotency_key TEXT NOT NULL UNIQUE,
     created_at TEXT NOT NULL DEFAULT (datetime('now'))
   );
@@ -63,12 +63,118 @@ db.exec(`
     quantity INTEGER NOT NULL
   );
 
+  CREATE TABLE IF NOT EXISTS order_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    order_id INTEGER NOT NULL REFERENCES orders(id),
+    type TEXT NOT NULL CHECK (type IN ('placed','status_changed','cancelled')),
+    message TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now'))
+  );
+
+  CREATE TABLE IF NOT EXISTS notification_reads (
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    event_id INTEGER NOT NULL REFERENCES order_events(id),
+    read_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (user_id, event_id)
+  );
+
   CREATE TABLE IF NOT EXISTS sessions (
     sid TEXT PRIMARY KEY,
     sess TEXT NOT NULL,
     expires INTEGER NOT NULL
   );
 `);
+
+// Widen the orders.status CHECK to allow 'cancelled'. CREATE TABLE IF NOT
+// EXISTS above is a no-op against a DB file created before this column
+// constraint existed, so an already-deployed volume still has the old
+// CHECK and would reject a cancellation. SQLite can't ALTER a CHECK
+// constraint in place — rebuild the table, preserving every row.
+function migrateOrdersStatusCheck(): void {
+  const table = db
+    .prepare<[], { sql: string }>("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'orders'")
+    .get();
+  const orderItems = db
+    .prepare<[], { sql: string }>("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'order_items'")
+    .get();
+  const orderEvents = db
+    .prepare<[], { sql: string }>("SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'order_events'")
+    .get();
+  // A table rename makes SQLite auto-rewrite every OTHER table's REFERENCES
+  // clauses to point at the new name — so renaming orders -> orders_old
+  // silently repoints order_items/order_events at orders_old, which then
+  // breaks once orders_old is dropped. `legacy_alter_table` turns that
+  // auto-rewrite off. The `needsFkRepair` checks are a one-time fix for any
+  // DB file this bug already ran against (tables left pointing at a dropped
+  // 'orders_old').
+  const needsCheckMigration = !table || !table.sql.includes("'cancelled'");
+  const needsItemsFkRepair = orderItems && orderItems.sql.includes("orders_old");
+  const needsEventsFkRepair = orderEvents && orderEvents.sql.includes("orders_old");
+  if (!table || (!needsCheckMigration && !needsItemsFkRepair && !needsEventsFkRepair)) return;
+
+  db.pragma("foreign_keys = OFF");
+  db.pragma("legacy_alter_table = ON");
+  try {
+    db.transaction(() => {
+      if (needsCheckMigration) {
+        db.exec(`
+          ALTER TABLE orders RENAME TO orders_old;
+          CREATE TABLE orders (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id INTEGER NOT NULL REFERENCES users(id),
+            status TEXT NOT NULL CHECK (status IN ('confirmed','ready_for_pickup','completed','cancelled')) DEFAULT 'confirmed',
+            idempotency_key TEXT NOT NULL UNIQUE,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+          );
+          INSERT INTO orders (id, user_id, status, idempotency_key, created_at)
+            SELECT id, user_id, status, idempotency_key, created_at FROM orders_old;
+          DROP TABLE orders_old;
+        `);
+      }
+      if (needsItemsFkRepair || needsCheckMigration) {
+        db.exec(`
+          ALTER TABLE order_items RENAME TO order_items_old;
+          CREATE TABLE order_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL REFERENCES orders(id),
+            product_id INTEGER NOT NULL,
+            sku_id INTEGER NOT NULL,
+            product_name_snapshot TEXT NOT NULL,
+            color_snapshot TEXT NOT NULL,
+            size_snapshot TEXT NOT NULL,
+            unit_price_cents_snapshot INTEGER NOT NULL,
+            quantity INTEGER NOT NULL
+          );
+          INSERT INTO order_items
+            (id, order_id, product_id, sku_id, product_name_snapshot, color_snapshot, size_snapshot, unit_price_cents_snapshot, quantity)
+            SELECT id, order_id, product_id, sku_id, product_name_snapshot, color_snapshot, size_snapshot, unit_price_cents_snapshot, quantity
+            FROM order_items_old;
+          DROP TABLE order_items_old;
+        `);
+      }
+      if (needsEventsFkRepair) {
+        db.exec(`
+          ALTER TABLE order_events RENAME TO order_events_old;
+          CREATE TABLE order_events (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            order_id INTEGER NOT NULL REFERENCES orders(id),
+            type TEXT NOT NULL CHECK (type IN ('placed','status_changed','cancelled')),
+            message TEXT NOT NULL,
+            created_at TEXT NOT NULL DEFAULT (datetime('now'))
+          );
+          INSERT INTO order_events (id, order_id, type, message, created_at)
+            SELECT id, order_id, type, message, created_at FROM order_events_old;
+          DROP TABLE order_events_old;
+        `);
+      }
+    })();
+  } finally {
+    db.pragma("legacy_alter_table = OFF");
+    db.pragma("foreign_keys = ON");
+  }
+}
+
+migrateOrdersStatusCheck();
 
 interface SeedSku {
   color: string;

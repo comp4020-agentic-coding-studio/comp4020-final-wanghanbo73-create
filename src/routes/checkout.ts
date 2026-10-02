@@ -6,6 +6,7 @@ import { csrfToken } from "../csrf.ts";
 import { layout } from "../views/layout.ts";
 import { checkoutPage } from "../views/checkout.ts";
 import { escapeHtml } from "../views/html.ts";
+import { recordOrderEvent } from "../notifications.ts";
 import type { OrderRow, ProductRow, SkuRow } from "../types.ts";
 
 export const checkoutRouter = Router();
@@ -149,6 +150,8 @@ checkoutRouter.post("/buy", requireCustomer, (req, res) => {
         (order_id, product_id, sku_id, product_name_snapshot, color_snapshot, size_snapshot, unit_price_cents_snapshot, quantity)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     ).run(orderId, product.id, sku.id, product.name, sku.color, sku.size, product.price_cents, qty);
+
+    recordOrderEvent(orderId, "placed", `Order #${orderId} placed successfully.`);
 
     return db.prepare<[number], OrderRow>("SELECT * FROM orders WHERE id = ?").get(orderId)!;
   });

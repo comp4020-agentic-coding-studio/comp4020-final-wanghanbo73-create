@@ -42,7 +42,7 @@ export interface SkuRow {
   stock: number;
 }
 
-export type OrderStatus = "confirmed" | "ready_for_pickup" | "completed";
+export type OrderStatus = "confirmed" | "ready_for_pickup" | "completed" | "cancelled";
 
 export interface OrderRow {
   id: number;
@@ -62,6 +62,16 @@ export interface OrderItemRow {
   size_snapshot: string;
   unit_price_cents_snapshot: number;
   quantity: number;
+}
+
+export type OrderEventType = "placed" | "status_changed" | "cancelled";
+
+export interface OrderEventRow {
+  id: number;
+  order_id: number;
+  type: OrderEventType;
+  message: string;
+  created_at: string;
 }
 
 // Declaration merging onto express-session's SessionData.

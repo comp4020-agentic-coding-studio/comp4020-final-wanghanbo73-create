@@ -1,4 +1,5 @@
 import type { SessionUser } from "../types.ts";
+import { getUnreadCount } from "../notifications.ts";
 import { escapeHtml, when } from "./html.ts";
 
 export interface LayoutOptions {
@@ -9,6 +10,7 @@ export interface LayoutOptions {
 }
 
 export function layout({ title, user, csrfToken, body }: LayoutOptions): string {
+  const unreadCount = user ? getUnreadCount(user.id) : 0;
   return `<!doctype html>
 <html lang="en">
 <head>
@@ -27,6 +29,37 @@ export function layout({ title, user, csrfToken, body }: LayoutOptions): string 
           <li><a href="/">Home</a></li>
           <li><a href="/limited">Limited</a></li>
           ${when(user, `<li><a href="/orders">My Orders</a></li>`)}
+          ${when(
+            user,
+            `<li>
+              <a
+                href="/notifications"
+                class="icon-link"
+                aria-label="${unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}"
+              >
+                <svg class="icon-link__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
+                  <path
+                    d="M4 6h16v12H4z"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linejoin="round"
+                  />
+                  <path
+                    d="M4 7l8 6 8-6"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  />
+                </svg>
+                ${
+                  unreadCount > 0
+                    ? `<span class="icon-link__badge" aria-hidden="true">${unreadCount > 99 ? "99+" : unreadCount}</span>`
+                    : ""
+                }
+              </a>
+            </li>`,
+          )}
           ${when(user?.role === "admin", `<li><a href="/admin">Admin</a></li>`)}
           ${
             user

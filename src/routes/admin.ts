@@ -9,8 +9,9 @@ import { adminProductsPage } from "../views/admin/products.ts";
 import { productEditPage } from "../views/admin/product-edit.ts";
 import { adminOrdersPage } from "../views/admin/orders.ts";
 import type { AdminOrderRow } from "../views/admin/orders.ts";
-import type { Category, OrderStatus, ProductRow, SaleType, SkuRow } from "../types.ts";
+import type { Category, OrderItemRow, OrderRow, OrderStatus, ProductRow, SaleType, SkuRow } from "../types.ts";
 import { escapeHtml } from "../views/html.ts";
+import { recordOrderEvent } from "../notifications.ts";
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -223,7 +224,10 @@ adminRouter.get("/orders", (req, res) => {
   render(req, res, "Orders", adminOrdersPage(orders, csrfToken(req)));
 });
 
-const VALID_STATUSES: OrderStatus[] = ["confirmed", "ready_for_pickup", "completed"];
+const VALID_STATUSES: OrderStatus[] = ["confirmed", "ready_for_pickup", "completed", "cancelled"];
+const TERMINAL_STATUSES: OrderStatus[] = ["completed", "cancelled"];
+
+class StatusUpdateError extends Error {}
 
 adminRouter.post("/orders/:id/status", (req, res) => {
   const id = Number(req.params.id);
@@ -232,6 +236,39 @@ adminRouter.post("/orders/:id/status", (req, res) => {
     render(req, res, "Orders", `<p class="notice notice--error">Invalid status: ${escapeHtml(String(status))}</p>`, 400);
     return;
   }
-  db.prepare("UPDATE orders SET status = ? WHERE id = ?").run(status, id);
+
+  // Re-read current status, validate, mutate stock + status, and log the
+  // event all inside one transaction — no partial state if anything throws.
+  const applyStatusChange = db.transaction((): void => {
+    const order = db.prepare<[number], OrderRow>("SELECT * FROM orders WHERE id = ?").get(id);
+    if (!order) throw new StatusUpdateError(`Order #${id} does not exist.`);
+    if (order.status === status) return;
+    if (TERMINAL_STATUSES.includes(order.status)) {
+      throw new StatusUpdateError(`Order #${id} is already ${order.status} and can't be changed further.`);
+    }
+
+    if (status === "cancelled") {
+      const items = db
+        .prepare<[number], OrderItemRow>("SELECT * FROM order_items WHERE order_id = ?")
+        .all(id);
+      for (const item of items) {
+        db.prepare("UPDATE skus SET stock = stock + ? WHERE id = ?").run(item.quantity, item.sku_id);
+      }
+      db.prepare("UPDATE orders SET status = 'cancelled' WHERE id = ?").run(id);
+      recordOrderEvent(id, "cancelled", `Order #${id} was cancelled and the stock has been returned.`);
+      return;
+    }
+
+    db.prepare("UPDATE orders SET status = ? WHERE id = ?").run(status, id);
+    recordOrderEvent(id, "status_changed", `Order #${id} status updated to ${status.replace(/_/g, " ")}.`);
+  });
+
+  try {
+    applyStatusChange();
+  } catch (err) {
+    const message = err instanceof StatusUpdateError ? err.message : "Could not update order.";
+    render(req, res, "Orders", `<p class="notice notice--error">${escapeHtml(message)}</p>`, err instanceof StatusUpdateError ? 409 : 500);
+    return;
+  }
   res.redirect("/admin/orders");
 });

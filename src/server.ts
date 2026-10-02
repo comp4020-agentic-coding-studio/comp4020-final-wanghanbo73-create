@@ -8,6 +8,7 @@ import { catalogRouter } from "./routes/catalog.ts";
 import { authRouter } from "./routes/auth-routes.ts";
 import { checkoutRouter } from "./routes/checkout.ts";
 import { ordersRouter } from "./routes/orders.ts";
+import { notificationsRouter } from "./routes/notifications.ts";
 import { adminRouter } from "./routes/admin.ts";
 import { readmeRouter } from "./routes/readme.ts";
 import { layout } from "./views/layout.ts";
@@ -52,6 +53,7 @@ app.use(catalogRouter);
 app.use(authRouter);
 app.use(checkoutRouter);
 app.use(ordersRouter);
+app.use(notificationsRouter);
 app.use("/admin", adminRouter);
 app.use(readmeRouter);
 
