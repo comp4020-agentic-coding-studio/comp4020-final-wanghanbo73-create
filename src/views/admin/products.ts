@@ -17,7 +17,7 @@ export function adminProductsPage(products: ProductRow[], csrfToken: string): st
             <td>${escapeHtml(p.category)}</td>
             <td>${escapeHtml(p.sale_type)}</td>
             <td>${money(p.price_cents)}</td>
-            <td>${p.active ? "Active" : "Inactive"}</td>
+            <td><span class="badge ${p.active ? "badge--live" : "badge--soldout"}">${p.active ? "Active" : "Inactive"}</span></td>
             <td>
               <a href="/admin/products/${p.id}/edit">Edit</a>
               <form method="post" action="/admin/products/${p.id}/edit" class="inline-form">

@@ -35,8 +35,18 @@ export function productPage({ product, skus, isLive }: ProductPageOptions): stri
 
   return `
   <article class="product-detail">
-    <img src="${escapeHtml(product.image_path)}" alt="" class="product-detail__image" width="480" height="360" />
+    <div class="product-card__image-wrap">
+      <img src="${escapeHtml(product.image_path)}" alt="" class="product-detail__image" width="480" height="360" />
+      ${
+        product.sale_type === "limited"
+          ? `<div class="badge-row"><span class="badge ${isLive ? "badge--live" : "badge--pending"}">${
+              isLive ? "Live now" : "Upcoming"
+            }</span></div>`
+          : ""
+      }
+    </div>
     <div class="product-detail__info">
+      <p class="product-card__category">${escapeHtml(product.category)}</p>
       <h1>${escapeHtml(product.name)}</h1>
       <p class="product-detail__price">${money(product.price_cents)}</p>
       <p>${escapeHtml(product.description)}</p>

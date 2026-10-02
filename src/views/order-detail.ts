@@ -5,7 +5,7 @@ export function orderDetailPage(order: OrderRow, items: OrderItemRow[]): string 
   const total = items.reduce((sum, i) => sum + i.unit_price_cents_snapshot * i.quantity, 0);
   return `
   <h1>Order #${order.id}</h1>
-  <p>Status: <strong>${escapeHtml(order.status)}</strong></p>
+  <p>Status: <span class="badge badge--live">${escapeHtml(order.status)}</span></p>
   <p>Placed: ${escapeHtml(order.created_at)}</p>
   <table class="data-table">
     <thead>

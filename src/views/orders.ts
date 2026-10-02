@@ -16,7 +16,7 @@ export function ordersPage(orders: OrderRow[]): string {
               .map(
                 (o) => `<tr>
                   <td><a href="/orders/${o.id}">#${o.id}</a></td>
-                  <td>${escapeHtml(o.status)}</td>
+                  <td><span class="badge">${escapeHtml(o.status)}</span></td>
                   <td>${escapeHtml(o.created_at)}</td>
                 </tr>`,
               )

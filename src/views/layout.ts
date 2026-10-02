@@ -21,7 +21,7 @@ export function layout({ title, user, csrfToken, body }: LayoutOptions): string 
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="site-header">
     <div class="site-header__inner">
-      <a class="brand" href="/">Fieldmark</a>
+      <a class="brand" href="/"><span class="brand__mark" aria-hidden="true">FM</span>Fieldmark</a>
       <nav aria-label="Main">
         <ul class="nav-list">
           <li><a href="/">Home</a></li>
@@ -37,7 +37,7 @@ export function layout({ title, user, csrfToken, body }: LayoutOptions): string 
                     <button type="submit" class="link-button">Log out</button>
                   </form>
                 </li>`
-              : `<li><a href="/login">Log in</a></li><li><a href="/register">Register</a></li>`
+              : `<li><a href="/login" class="button button--outline">Log in</a></li><li><a href="/register" class="button button--primary">Register</a></li>`
           }
         </ul>
       </nav>
