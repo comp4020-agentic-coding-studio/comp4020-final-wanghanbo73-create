@@ -1,4 +1,5 @@
 [tools]
+flyctl = "latest"
 # node and pnpm run the supplied harness (`pnpm check`) whatever your app is
 # built with; add your own stack's tools alongside them
 node = "24.21.0"

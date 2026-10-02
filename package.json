@@ -7,9 +7,20 @@
     "typecheck": "tsc --noEmit",
     "check": "pnpm typecheck && pnpm test",
     "check:evidence": "node scripts/check-evidence.ts",
-    "test": "vitest run"
+    "test": "vitest run",
+    "start": "node src/server.ts"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "csrf-sync": "^4.2.1",
+    "express": "^5.2.1",
+    "express-session": "^1.19.0",
+    "marked": "^18.0.14"
   },
   "devDependencies": {
+    "@types/better-sqlite3": "^9.6.0",
+    "@types/express": "^5.0.6",
+    "@types/express-session": "^1.19.0",
     "@types/jsdom": "^30.0.0",
     "@types/node": "^24.0.0",
     "jsdom": "^30.1.0",
