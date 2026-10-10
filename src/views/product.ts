@@ -27,14 +27,14 @@ export function productPage({ product, skus, isLive }: ProductPageOptions): stri
   const skuOptions = skus
     .map((s) => {
       const soldOut = s.stock <= 0;
-      return `<option value="${s.id}" data-stock="${s.stock}" ${soldOut ? "disabled" : ""}>
+      return `<option value="${s.id}" data-stock="${s.stock}" data-sku-id="${s.id}" ${soldOut ? "disabled" : ""}>
         ${escapeHtml(s.color)} / ${escapeHtml(s.size)} — ${soldOut ? "SOLD OUT" : `${s.stock} in stock`}
       </option>`;
     })
     .join("");
 
   return `
-  <article class="product-detail">
+  <article class="product-detail" data-product-id="${product.id}">
     <div class="product-card__image-wrap">
       <img src="${escapeHtml(product.image_path)}" alt="" class="product-detail__image" width="480" height="360" />
       ${
@@ -47,12 +47,13 @@ export function productPage({ product, skus, isLive }: ProductPageOptions): stri
     </div>
     <div class="product-detail__info">
       <p class="product-card__category">${escapeHtml(product.category)}</p>
-      <h1>${escapeHtml(product.name)}</h1>
+      <h1 data-product-name>${escapeHtml(product.name)}</h1>
       <p class="product-detail__price">${money(product.price_cents)}</p>
       <p>${escapeHtml(product.description)}</p>
       ${limitedNotice}
       ${when(!isLive, `<p class="notice notice--error">This item is not available for purchase yet.</p>`)}
-      <form method="get" action="/checkout" class="purchase-form">
+      <div data-availability-notice></div>
+      <form method="get" action="/checkout" class="purchase-form" data-purchase-form>
         <div class="field">
           <label for="sku">Colour / Size</label>
           <select id="sku" name="sku" required ${!isLive ? "disabled" : ""}>
@@ -64,7 +65,7 @@ export function productPage({ product, skus, isLive }: ProductPageOptions): stri
           <label for="qty">Quantity</label>
           <input id="qty" name="qty" type="number" min="1" value="1" required ${!isLive ? "disabled" : ""} />
         </div>
-        <button type="submit" class="button button--primary" ${!isLive ? "disabled" : ""}>
+        <button type="submit" class="button button--primary" data-buy-button ${!isLive ? "disabled" : ""}>
           ${isLive ? "Buy" : "Not available yet"}
         </button>
       </form>

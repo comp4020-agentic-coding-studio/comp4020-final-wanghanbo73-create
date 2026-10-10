@@ -35,6 +35,8 @@ export function layout({ title, user, csrfToken, body }: LayoutOptions): string 
               <a
                 href="/notifications"
                 class="icon-link"
+                id="notif-badge"
+                data-unread-count="${unreadCount}"
                 aria-label="${unreadCount > 0 ? `Notifications, ${unreadCount} unread` : "Notifications"}"
               >
                 <svg class="icon-link__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
@@ -82,6 +84,7 @@ ${body}
   <footer class="site-footer">
     <p>Fieldmark is a course demo storefront. No real payments are taken.</p>
   </footer>
+  <script src="/realtime.js" defer></script>
 </body>
 </html>`;
 }

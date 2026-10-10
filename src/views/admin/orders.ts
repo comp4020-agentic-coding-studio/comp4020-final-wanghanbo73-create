@@ -11,16 +11,16 @@ export interface AdminOrderRow extends OrderRow {
 export function adminOrdersPage(orders: AdminOrderRow[], csrfToken: string): string {
   return `
   <h1>Orders</h1>
-  <table class="data-table">
+  <table class="data-table" id="admin-orders-table">
     <thead><tr><th>Order</th><th>Customer</th><th>Status</th><th>Placed</th><th>Update</th></tr></thead>
-    <tbody>
+    <tbody id="admin-orders-body">
       ${orders
         .map((o) => {
           const terminal = TERMINAL_STATUSES.includes(o.status);
-          return `<tr>
+          return `<tr data-order-id="${o.id}">
             <td>#${o.id}</td>
             <td>${escapeHtml(o.user_email)}</td>
-            <td><span class="badge ${o.status === "cancelled" ? "badge--soldout" : o.status === "completed" ? "badge--live" : "badge--pending"}">${escapeHtml(o.status)}</span></td>
+            <td><span class="badge ${o.status === "cancelled" ? "badge--soldout" : o.status === "completed" ? "badge--live" : "badge--pending"}" data-order-status>${escapeHtml(o.status)}</span></td>
             <td>${escapeHtml(o.created_at)}</td>
             <td>
               ${

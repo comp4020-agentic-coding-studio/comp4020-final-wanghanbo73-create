@@ -84,6 +84,50 @@ before it depends on exact stock numbers).
   sequence, and the Fly deploy itself, happen after this file is written —
   record the outcome and commit links here once that's done.
 
+## Crit 9: real-time and concurrent use
+
+Crit 9 required the deployed app to push a change made by one person to every
+other open session within about a second, with no reload, plus a written
+decision about how the app behaves with several people in it at once.
+
+Before writing any code for this, I had Claude read through the whole
+existing codebase again (routes, views, the purchase transaction, the
+notification/order-event tables already in place from the previous crit)
+rather than guessing at the shape of things from memory, then had it propose
+and I approved a plan: Server-Sent Events over a small in-process pub/sub hub
+(`src/realtime.ts`), a `GET /events` endpoint that subscribes a connection to
+a public `catalog` channel plus a per-user channel and (for admins) an
+`admin` channel, and `publish(...)` calls added immediately after each
+existing `db.transaction(...)` call succeeds in `checkout.ts` and
+`admin.ts` — never inside the transaction, and always built from a
+freshly re-read row rather than anything computed mid-transaction or taken
+from the request. That placement matters: it's what keeps the live layer
+from ever being able to announce something that didn't actually commit,
+which is the same "server state is authoritative" rule the purchase flow
+already followed.
+
+The one concurrency decision this crit asked for — written up in
+[`docs/adr/0002-realtime-concurrency.md`](docs/adr/0002-realtime-concurrency.md)
+— is that live push only patches read-only elements (stock figures, SOLD OUT
+state, order status badges, the notification count, the admin order queue);
+it never writes into an open form. Two admins racing to change the same
+order's status still resolve through the status-change transaction that
+already existed (last write wins, a same-status write is a no-op via the
+existing guard in `applyStatusChange`), and the broadcast afterwards is what
+makes every open tab converge on the true value, not either admin's
+assumption of what they clicked.
+
+A deliberate scope cut: reconnect behaviour uses a small `GET
+/events/resync` fetch (keyed off whatever SKU/order ids are already on the
+page) on every `EventSource` "open" event, rather than an in-memory
+event-replay buffer — simpler, and strictly more correct, since resync
+always returns current truth instead of whatever happened to be buffered.
+
+- TODO (author): manual multi-tab verification (buy-down-to-sold-out in one
+  tab reflected live in another; admin status change/cancel reflected on a
+  customer's open order page; notification count updating live) and the Fly
+  redeploy, once done — record the outcome and commit links here.
+
 ## Stack rationale
 
 The reasoning behind each stack choice — why `better-sqlite3` over an async

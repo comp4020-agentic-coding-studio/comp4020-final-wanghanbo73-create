@@ -11,6 +11,7 @@ import { ordersRouter } from "./routes/orders.ts";
 import { notificationsRouter } from "./routes/notifications.ts";
 import { adminRouter } from "./routes/admin.ts";
 import { readmeRouter } from "./routes/readme.ts";
+import { eventsRouter } from "./routes/events.ts";
 import { layout } from "./views/layout.ts";
 
 const app = express();
@@ -56,6 +57,7 @@ app.use(ordersRouter);
 app.use(notificationsRouter);
 app.use("/admin", adminRouter);
 app.use(readmeRouter);
+app.use(eventsRouter);
 
 app.use((req, res) => {
   res.status(404).send(

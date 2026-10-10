@@ -7,6 +7,7 @@ import { layout } from "../views/layout.ts";
 import { checkoutPage } from "../views/checkout.ts";
 import { escapeHtml } from "../views/html.ts";
 import { recordOrderEvent } from "../notifications.ts";
+import { publish } from "../realtime.ts";
 import type { OrderRow, ProductRow, SkuRow } from "../types.ts";
 
 export const checkoutRouter = Router();
@@ -158,6 +159,14 @@ checkoutRouter.post("/buy", requireCustomer, (req, res) => {
 
   try {
     const order = runPurchase();
+    // Re-read post-commit state rather than trusting anything computed
+    // inside the transaction closure — same "server state is authoritative"
+    // rule the transaction itself follows.
+    const sku = db.prepare<[number], SkuRow>("SELECT * FROM skus WHERE id = ?").get(skuId);
+    if (sku) {
+      publish("catalog", "stock", { skuId: sku.id, productId: sku.product_id, stock: sku.stock });
+    }
+    publish("admin", "new_order", { orderId: order.id });
     res.redirect(`/orders/${order.id}`);
   } catch (err) {
     const message = err instanceof PurchaseError ? err.message : "Order failed — please try again.";

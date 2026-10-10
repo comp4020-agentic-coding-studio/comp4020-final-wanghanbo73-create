@@ -12,8 +12,9 @@ import type { AdminOrderRow } from "../views/admin/orders.ts";
 import { newAdminPage } from "../views/admin/new-admin.ts";
 import type { Category, OrderItemRow, OrderRow, OrderStatus, ProductRow, SaleType, SkuRow, UserRow } from "../types.ts";
 import { escapeHtml } from "../views/html.ts";
-import { recordOrderEvent } from "../notifications.ts";
+import { recordOrderEvent, getUnreadCount } from "../notifications.ts";
 import { hashPassword } from "../auth.ts";
+import { publish } from "../realtime.ts";
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -143,7 +144,9 @@ adminRouter.post("/products/:id/edit", (req, res) => {
   // Three distinct sub-forms post to the same URL: toggling active,
   // updating a SKU's stock, adding a new SKU, or the full edit form.
   if (req.body.toggle_active) {
-    db.prepare("UPDATE products SET active = ? WHERE id = ?").run(product.active ? 0 : 1, id);
+    const newActive = product.active ? 0 : 1;
+    db.prepare("UPDATE products SET active = ? WHERE id = ?").run(newActive, id);
+    publish("catalog", "product_active", { productId: id, active: newActive });
     res.redirect("/admin/products");
     return;
   }
@@ -157,6 +160,7 @@ adminRouter.post("/products/:id/edit", (req, res) => {
         skuId,
         id,
       );
+      publish("catalog", "stock", { skuId, productId: id, stock: Math.round(stock) });
     }
     res.redirect(`/admin/products/${id}/edit`);
     return;
@@ -211,6 +215,13 @@ adminRouter.post("/products/:id/edit", (req, res) => {
       release_at = @release_at, per_account_limit = @per_account_limit, image_path = @image_path
      WHERE id = @id`,
   ).run({ ...parsed, id });
+
+  publish("catalog", "product_updated", {
+    productId: id,
+    name: parsed.name,
+    price_cents: parsed.price_cents,
+    active: parsed.active,
+  });
 
   res.redirect(`/admin/products/${id}/edit`);
 });
@@ -272,6 +283,30 @@ adminRouter.post("/orders/:id/status", (req, res) => {
     render(req, res, "Orders", `<p class="notice notice--error">${escapeHtml(message)}</p>`, err instanceof StatusUpdateError ? 409 : 500);
     return;
   }
+
+  // Re-read post-commit state to broadcast, rather than trusting anything
+  // computed inside the transaction closure.
+  const updated = db.prepare<[number], OrderRow>("SELECT * FROM orders WHERE id = ?").get(id);
+  if (updated) {
+    publish(`user:${updated.user_id}`, "order_status", {
+      orderId: id,
+      status: updated.status,
+      unreadCount: getUnreadCount(updated.user_id),
+    });
+    publish("admin", "order_status", { orderId: id, status: updated.status });
+    if (updated.status === "cancelled") {
+      const items = db
+        .prepare<[number], OrderItemRow>("SELECT * FROM order_items WHERE order_id = ?")
+        .all(id);
+      for (const item of items) {
+        const sku = db.prepare<[number], SkuRow>("SELECT * FROM skus WHERE id = ?").get(item.sku_id);
+        if (sku) {
+          publish("catalog", "stock", { skuId: sku.id, productId: sku.product_id, stock: sku.stock });
+        }
+      }
+    }
+  }
+
   res.redirect("/admin/orders");
 });
 

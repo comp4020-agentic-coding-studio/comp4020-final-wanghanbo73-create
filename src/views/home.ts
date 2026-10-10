@@ -2,15 +2,15 @@ import type { ProductRow } from "../types.ts";
 import { escapeHtml, money } from "./html.ts";
 
 export function productCard(p: ProductRow, badgeHtml = ""): string {
-  return `<li class="product-card">
+  return `<li class="product-card" data-product-id="${p.id}">
     <a href="/products/${encodeURIComponent(p.slug)}">
       <div class="product-card__image-wrap">
         <img src="${escapeHtml(p.image_path)}" alt="" class="product-card__image" width="320" height="240" />
         ${badgeHtml ? `<div class="badge-row">${badgeHtml}</div>` : ""}
       </div>
       <p class="product-card__category">${escapeHtml(p.category)}</p>
-      <h3>${escapeHtml(p.name)}</h3>
-      <p class="product-card__price">${money(p.price_cents)}</p>
+      <h3 data-product-name>${escapeHtml(p.name)}</h3>
+      <p class="product-card__price" data-product-price>${money(p.price_cents)}</p>
     </a>
   </li>`;
 }
