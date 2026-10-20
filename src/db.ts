@@ -322,6 +322,37 @@ const SEED_PRODUCTS: SeedProduct[] = [
       { color: "Cream", size: "10", stock: 3 },
     ],
   },
+  {
+    slug: "street-shorts",
+    name: "Street Shorts",
+    description: "Lightweight everyday shorts with an elastic waistband.",
+    price_cents: 4000,
+    category: "clothing",
+    sale_type: "regular",
+    release_at: null,
+    per_account_limit: null,
+    image_path: "/images/street-shorts.svg",
+    skus: [
+      { color: "Navy", size: "M", stock: 10 },
+      { color: "Navy", size: "L", stock: 7 },
+      { color: "Black", size: "M", stock: 6 },
+    ],
+  },
+  {
+    slug: "cloud-slides",
+    name: "Cloud Slides",
+    description: "Cushioned slide sandals for rest days.",
+    price_cents: 3500,
+    category: "footwear",
+    sale_type: "regular",
+    release_at: null,
+    per_account_limit: null,
+    image_path: "/images/cloud-slides.svg",
+    skus: [
+      { color: "Green", size: "9", stock: 11 },
+      { color: "Green", size: "10", stock: 9 },
+    ],
+  },
 ];
 
 function seed(): void {

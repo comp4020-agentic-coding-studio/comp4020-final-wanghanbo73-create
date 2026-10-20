@@ -1,4 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240" role="img" aria-label="Product">
   <rect width="320" height="240" fill="#777777"/>
-  <text x="160" y="120" font-family="sans-serif" font-size="22" fill="#ffffff" text-anchor="middle" dominant-baseline="middle">Product</text>
+  <path d="M160 50 C148 50 139 59 139 70 L120 80 L128 96 L139 90 L139 90 L139 170 L181 170 L181 90 L192 96 L200 80 L181 70 C181 59 172 50 160 50 Z"
+        fill="#dddddd" stroke="#4a4a4a" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+  <text x="160" y="216" font-family="sans-serif" font-size="18" fill="#ffffff" text-anchor="middle">Product</text>
 </svg>

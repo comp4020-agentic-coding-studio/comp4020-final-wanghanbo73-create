@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240" role="img" aria-label="Street Shorts">
+  <rect width="320" height="240" fill="#394a5b"/>
+  <path d="M126 50 L194 50 L200 100 L210 185 L182 185 L170 115 L150 115 L138 185 L110 185 L120 100 Z"
+        fill="#dce6f0" stroke="#1c2735" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
+  <line x1="160" y1="50" x2="160" y2="100" stroke="#1c2735" stroke-width="2.5"/>
+  <rect x="140" y="62" width="40" height="10" rx="3" fill="none" stroke="#1c2735" stroke-width="2.5"/>
+  <text x="160" y="216" font-family="sans-serif" font-size="18" fill="#ffffff" text-anchor="middle">Street Shorts</text>
+</svg>
