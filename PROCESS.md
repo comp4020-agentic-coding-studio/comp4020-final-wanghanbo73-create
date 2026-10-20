@@ -172,14 +172,63 @@ the pre-change status it already read — so the log line's `from`/`to` pair
 comes from the exact same read the transaction used to make its decision,
 not a reconstruction.
 
-- TODO (author): commit links for the logging/ADR work, once committed.
-- TODO (author): manual two-browser verification before the crit — register
-  or log in as two different accounts in two separate Chrome profiles, buy
-  down a shared SKU's stock from one, change an order's status as an admin
-  from the other, and confirm `mise exec -- flyctl logs -a <repo>` shows
-  each actor distinctly and every action logged, with no screen-sharing the
-  UI needed to narrate it. Record the outcome (and anything that needed
-  fixing as a result) here once done.
+Logging and the ADR landed in
+[`d3bdb71`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-wanghanbo73-create/commit/d3bdb71);
+deployed to `comp4020-final-wanghanbo73-create.fly.dev` and checked against
+the live app with two independent cookie jars acting as two separate
+browser sessions (same no-shared-cookies property as two Chrome profiles —
+each jar gets its own session cookie from the server, nothing shared
+client-side). That check caught a real bug:
+[`53c5187`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-wanghanbo73-create/commit/53c5187)
+fixes it.
+
+**The bug, caught by actually reading the log tail rather than trusting the
+code:** the `http.request` middleware read `req.path` inside the
+`res.on('finish')` callback. Express rewrites `req.url` (which `req.path` is
+a live view of) while a request is inside a path-prefixed sub-router —
+`/admin` is mounted with `app.use("/admin", adminRouter)` — so by the time
+a request to `/admin/products` finished, the log line reported `path:
+"/products"` or even `"/"`, depending on how deep the matched route was.
+Reading the log tail while deliberately sending a non-admin session at
+`/admin/products` is what surfaced it: the request correctly 403'd, but the
+log line describing *what* was denied was wrong, which defeats the entire
+point of narrating from logs. The fix captures `req.originalUrl` — set once
+per request and never rewritten by nested routers — before `next()` runs,
+rather than reading a value that changes meaning over the request's
+lifetime.
+
+**Verification performed, against the deployed app, via `mise exec --
+flyctl logs -a comp4020-final-wanghanbo73-create`:**
+
+- Two separate sessions (`personA`, `personB`) each self-registered through
+  `/register` with no shared cookie state between them — the log showed
+  each getting a distinct, truncated anonymous session id before
+  registering, then a distinct `{ kind: "customer", id, email }` actor
+  immediately after, confirmed by matching `auth.register` lines to
+  different `userId`s (13 and 14 in the run checked).
+- Person A requesting `/orders/1` — an order that belongs to neither of
+  them — got a 404, logged as `"path":"/orders/1","status":404` under
+  Person A's own actor, not under whoever actually owns order 1: the
+  ownership check in `src/routes/orders.ts` is confirmed working from the
+  outside, not just by reading the code.
+- Person B requesting `/admin` and `/admin/products` got a 403 both times,
+  logged with the correct path after the fix above (`"path":"/admin"`,
+  `"path":"/admin/products"`) and Person B's own customer actor — so a
+  narrator reading only the log tail can state, correctly, "customer 14
+  just tried to reach admin and was blocked," which is exactly what the
+  crit's no-UI narration requirement needs.
+- A full register → login-failure → login-success → buy → reject-oversell
+  → admin-status-change pass run locally against a from-scratch database
+  produced one correctly-attributed log line per action with no gaps (see
+  the `pnpm test` run below) before the same code was deployed and spot
+  checked live.
+
+Remaining limitation, noted rather than hidden: this verification used
+`curl` with independent cookie jars rather than two literal Chrome
+profiles, since that's what was available non-interactively; the property
+being tested (no shared client-side state, server tells sessions apart) is
+the same either way, but the actual crit still needs the real two-profile
+run with a human narrating live, which this doesn't substitute for.
 
 ## Stack rationale
 
@@ -190,8 +239,11 @@ bundler — is written up separately in
 
 ## What's mine to still add
 
-- TODO (author): commit links for the work described above, once committed
-  and pushed, in the `[`sha`](...)` form `check:evidence` looks for.
+- Crit 10's commit links are now in place above
+  ([`d3bdb71`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-wanghanbo73-create/commit/d3bdb71),
+  [`53c5187`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-wanghanbo73-create/commit/53c5187)).
+  The Docker/Fly-deploy TODO after the "Verification" section and the Crit 9
+  multi-tab-verification TODO above are still mine to fill in by hand.
 - TODO (author): anything about working with an agent on this brief that
   isn't captured by the mechanical account above — what I'd have done
   differently, what I didn't fully understand before I saw it run, and
