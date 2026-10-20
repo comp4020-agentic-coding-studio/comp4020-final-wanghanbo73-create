@@ -57,11 +57,20 @@ app.use(
 // this; this is the "who's even here" baseline a crit narrator starts from.
 app.use((req, res, next) => {
   const start = process.hrtime.bigint();
+  // Capture the path now, not inside the `finish` handler: a sub-router
+  // mounted with a prefix (e.g. "/admin") temporarily rewrites `req.url`
+  // for the duration of its own routing, and `req.path` is a live getter
+  // off that — reading it after the response has finished could see the
+  // stripped, prefix-less path instead of what was actually requested.
+  // `req.originalUrl` is set once up front and never rewritten by nested
+  // routers, so it's safe to read at any time, but capturing eagerly here
+  // avoids relying on that guarantee holding for every future router.
+  const path = req.originalUrl;
   res.on("finish", () => {
     const durationMs = Number(process.hrtime.bigint() - start) / 1e6;
     logEvent("http.request", req, {
       method: req.method,
-      path: req.path,
+      path,
       status: res.statusCode,
       durationMs: Math.round(durationMs),
     });
