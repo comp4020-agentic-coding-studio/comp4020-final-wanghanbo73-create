@@ -237,6 +237,27 @@ driver, why a hand-rolled session store instead of a library default, why no
 bundler — is written up separately in
 [`docs/adr/0001-stack.md`](docs/adr/0001-stack.md) rather than repeated here.
 
+## Catalogue artwork and two new products
+
+Outside of a crit cycle, I had Claude replace the plain-text placeholder SVGs
+in `public/images/` with small hand-drawn silhouette illustrations (a t-shirt
+outline, a hoodie with a drawstring, a jacket with pocket details, a shoe
+sole, etc.) in the same flat two-colour style, and add two new regular-sale
+products — Street Shorts and Cloud Slides — each with its own SVG and a few
+colour/size SKUs, seeded the same way every other product is: appended to
+`SEED_PRODUCTS` in `src/db.ts`, inserted via the existing `INSERT OR IGNORE`
+seed step, so a redeploy against an existing volume adds the two new rows
+without touching stock or orders already on disk.
+
+Verified locally first — `pnpm typecheck` clean, then the app started with
+the usual `DATA_DIR=./data-dev` command and the homepage HTML checked over
+`curl` for both new `<img>` tags before anything was committed — then
+committed together with the already-unstaged artwork swap
+([`4a5e1aa`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-wanghanbo73-create/commit/4a5e1aa))
+and pushed, which ran the `checks` CI workflow and redeployed
+`comp4020-final-wanghanbo73-create.fly.dev` automatically; confirmed live
+on the deployed site afterwards.
+
 ## What's mine to still add
 
 - Crit 10's commit links are now in place above
