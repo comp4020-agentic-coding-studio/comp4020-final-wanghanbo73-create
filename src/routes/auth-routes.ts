@@ -5,6 +5,7 @@ import { csrfToken } from "../csrf.ts";
 import { layout } from "../views/layout.ts";
 import { loginPage } from "../views/login.ts";
 import { registerPage } from "../views/register.ts";
+import { logEvent } from "../logger.ts";
 import type { Role, SessionUser, UserRow } from "../types.ts";
 
 export const authRouter = Router();
@@ -70,6 +71,9 @@ authRouter.post("/register", (req, res) => {
     }
     req.session.user = { id: Number(info.lastInsertRowid), email, role };
     req.session.save(() => {
+      // Logged after the session carries the new identity, so the actor in
+      // this line is the account that was just created, not "anon".
+      logEvent("auth.register", req, { userId: req.session.user!.id, email });
       res.redirect(next);
     });
   });
@@ -105,6 +109,10 @@ authRouter.post("/login", (req, res) => {
 
   const user = db.prepare<[string], UserRow>("SELECT * FROM users WHERE email = ?").get(email);
   if (!user || !verifyPassword(password, user.password_hash)) {
+    // Never log the attempted password — only that this email failed to
+    // authenticate, which is what tells two people apart in the log stream
+    // without exposing credentials.
+    logEvent("auth.login_failed", req, { email });
     fail();
     return;
   }
@@ -117,13 +125,21 @@ authRouter.post("/login", (req, res) => {
     }
     req.session.user = sessionUser;
     req.session.save(() => {
+      logEvent("auth.login_success", req, { userId: user.id, email: user.email, role: user.role });
       res.redirect(next);
     });
   });
 });
 
 authRouter.post("/logout", (req, res) => {
+  // Capture before destroy() clears req.session.user — logEvent(..., req)
+  // after destruction would otherwise log this as "anon".
+  const actorBeforeDestroy = req.session.user;
+  const ip = req.ip;
   req.session.destroy(() => {
+    if (actorBeforeDestroy) {
+      logEvent("auth.logout", null, { userId: actorBeforeDestroy.id, email: actorBeforeDestroy.email, ip });
+    }
     res.redirect("/");
   });
 });

@@ -8,6 +8,7 @@ import { checkoutPage } from "../views/checkout.ts";
 import { escapeHtml } from "../views/html.ts";
 import { recordOrderEvent } from "../notifications.ts";
 import { publish } from "../realtime.ts";
+import { logEvent } from "../logger.ts";
 import type { OrderRow, ProductRow, SkuRow } from "../types.ts";
 
 export const checkoutRouter = Router();
@@ -161,15 +162,32 @@ checkoutRouter.post("/buy", requireCustomer, (req, res) => {
     const order = runPurchase();
     // Re-read post-commit state rather than trusting anything computed
     // inside the transaction closure — same "server state is authoritative"
-    // rule the transaction itself follows.
+    // rule the transaction itself follows. The log line uses the same
+    // re-read values, for the same reason.
     const sku = db.prepare<[number], SkuRow>("SELECT * FROM skus WHERE id = ?").get(skuId);
     if (sku) {
       publish("catalog", "stock", { skuId: sku.id, productId: sku.product_id, stock: sku.stock });
     }
     publish("admin", "new_order", { orderId: order.id });
+    const totalCentsRow = db
+      .prepare<[number], { total: number | null }>(
+        "SELECT SUM(unit_price_cents_snapshot * quantity) AS total FROM order_items WHERE order_id = ?",
+      )
+      .get(order.id);
+    logEvent("order.placed", req, {
+      orderId: order.id,
+      skuId,
+      qty,
+      totalCents: totalCentsRow?.total ?? null,
+    });
     res.redirect(`/orders/${order.id}`);
   } catch (err) {
     const message = err instanceof PurchaseError ? err.message : "Order failed — please try again.";
+    logEvent("order.rejected", req, {
+      skuId,
+      qty,
+      reason: err instanceof PurchaseError ? err.message : "internal_error",
+    });
     res.status(err instanceof PurchaseError ? 409 : 500).send(
       layout({
         title: "Order failed",

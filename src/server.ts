@@ -4,6 +4,7 @@ import session from "express-session";
 import { db } from "./db.ts";
 import { SqliteSessionStore } from "./session-store.ts";
 import { csrfProtection } from "./csrf.ts";
+import { logEvent } from "./logger.ts";
 import { catalogRouter } from "./routes/catalog.ts";
 import { authRouter } from "./routes/auth-routes.ts";
 import { checkoutRouter } from "./routes/checkout.ts";
@@ -47,6 +48,26 @@ app.use(
     },
   }),
 );
+
+// Baseline per-request access log: every request, who made it, what they
+// got back. Mounted after the session middleware so req.session.user is
+// already populated, and before every router so it sees every request
+// regardless of which one (or none) matches. Action-level logs below (in
+// the route handlers) are the "what did they actually do" detail on top of
+// this; this is the "who's even here" baseline a crit narrator starts from.
+app.use((req, res, next) => {
+  const start = process.hrtime.bigint();
+  res.on("finish", () => {
+    const durationMs = Number(process.hrtime.bigint() - start) / 1e6;
+    logEvent("http.request", req, {
+      method: req.method,
+      path: req.path,
+      status: res.statusCode,
+      durationMs: Math.round(durationMs),
+    });
+  });
+  next();
+});
 
 app.use(csrfProtection);
 

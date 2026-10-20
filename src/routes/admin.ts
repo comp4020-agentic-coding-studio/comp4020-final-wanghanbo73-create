@@ -15,6 +15,7 @@ import { escapeHtml } from "../views/html.ts";
 import { recordOrderEvent, getUnreadCount } from "../notifications.ts";
 import { hashPassword } from "../auth.ts";
 import { publish } from "../realtime.ts";
+import { logEvent } from "../logger.ts";
 
 export const adminRouter = Router();
 adminRouter.use(requireAdmin);
@@ -102,11 +103,18 @@ adminRouter.post("/products/new", (req, res) => {
     return;
   }
   try {
-    db.prepare(
-      `INSERT INTO products
-        (slug, name, description, price_cents, category, sale_type, active, release_at, per_account_limit, image_path)
-       VALUES (@slug, @name, @description, @price_cents, @category, @sale_type, @active, @release_at, @per_account_limit, @image_path)`,
-    ).run(parsed);
+    const info = db
+      .prepare(
+        `INSERT INTO products
+          (slug, name, description, price_cents, category, sale_type, active, release_at, per_account_limit, image_path)
+         VALUES (@slug, @name, @description, @price_cents, @category, @sale_type, @active, @release_at, @per_account_limit, @image_path)`,
+      )
+      .run(parsed);
+    logEvent("admin.product_created", req, {
+      productId: Number(info.lastInsertRowid),
+      slug: parsed.slug,
+      name: parsed.name,
+    });
   } catch {
     render(
       req,
@@ -147,6 +155,7 @@ adminRouter.post("/products/:id/edit", (req, res) => {
     const newActive = product.active ? 0 : 1;
     db.prepare("UPDATE products SET active = ? WHERE id = ?").run(newActive, id);
     publish("catalog", "product_active", { productId: id, active: newActive });
+    logEvent("admin.product_toggled", req, { productId: id, active: newActive });
     res.redirect("/admin/products");
     return;
   }
@@ -161,6 +170,7 @@ adminRouter.post("/products/:id/edit", (req, res) => {
         id,
       );
       publish("catalog", "stock", { skuId, productId: id, stock: Math.round(stock) });
+      logEvent("admin.sku_stock_updated", req, { skuId, productId: id, stock: Math.round(stock) });
     }
     res.redirect(`/admin/products/${id}/edit`);
     return;
@@ -172,12 +182,16 @@ adminRouter.post("/products/:id/edit", (req, res) => {
     const stock = Number(req.body.stock);
     if (color && size && Number.isFinite(stock) && stock >= 0) {
       try {
-        db.prepare("INSERT INTO skus (product_id, color, size, stock) VALUES (?, ?, ?, ?)").run(
-          id,
+        const info = db
+          .prepare("INSERT INTO skus (product_id, color, size, stock) VALUES (?, ?, ?, ?)")
+          .run(id, color, size, Math.round(stock));
+        logEvent("admin.sku_added", req, {
+          skuId: Number(info.lastInsertRowid),
+          productId: id,
           color,
           size,
-          Math.round(stock),
-        );
+          stock: Math.round(stock),
+        });
       } catch {
         // duplicate (product_id, color, size) — ignore silently, admin can retry
       }
@@ -222,6 +236,12 @@ adminRouter.post("/products/:id/edit", (req, res) => {
     price_cents: parsed.price_cents,
     active: parsed.active,
   });
+  logEvent("admin.product_updated", req, {
+    productId: id,
+    name: parsed.name,
+    price_cents: parsed.price_cents,
+    active: parsed.active,
+  });
 
   res.redirect(`/admin/products/${id}/edit`);
 });
@@ -252,10 +272,13 @@ adminRouter.post("/orders/:id/status", (req, res) => {
 
   // Re-read current status, validate, mutate stock + status, and log the
   // event all inside one transaction — no partial state if anything throws.
-  const applyStatusChange = db.transaction((): void => {
+  // Returns the pre-change status (or null for a no-op) so the caller can
+  // log "from -> to" using the same authoritative read the transaction used,
+  // rather than issuing a second query after the fact.
+  const applyStatusChange = db.transaction((): OrderStatus | null => {
     const order = db.prepare<[number], OrderRow>("SELECT * FROM orders WHERE id = ?").get(id);
     if (!order) throw new StatusUpdateError(`Order #${id} does not exist.`);
-    if (order.status === status) return;
+    if (order.status === status) return null;
     if (TERMINAL_STATUSES.includes(order.status)) {
       throw new StatusUpdateError(`Order #${id} is already ${order.status} and can't be changed further.`);
     }
@@ -269,15 +292,17 @@ adminRouter.post("/orders/:id/status", (req, res) => {
       }
       db.prepare("UPDATE orders SET status = 'cancelled' WHERE id = ?").run(id);
       recordOrderEvent(id, "cancelled", `Order #${id} was cancelled and the stock has been returned.`);
-      return;
+      return order.status;
     }
 
     db.prepare("UPDATE orders SET status = ? WHERE id = ?").run(status, id);
     recordOrderEvent(id, "status_changed", `Order #${id} status updated to ${status.replace(/_/g, " ")}.`);
+    return order.status;
   });
 
+  let fromStatus: OrderStatus | null;
   try {
-    applyStatusChange();
+    fromStatus = applyStatusChange();
   } catch (err) {
     const message = err instanceof StatusUpdateError ? err.message : "Could not update order.";
     render(req, res, "Orders", `<p class="notice notice--error">${escapeHtml(message)}</p>`, err instanceof StatusUpdateError ? 409 : 500);
@@ -304,6 +329,9 @@ adminRouter.post("/orders/:id/status", (req, res) => {
           publish("catalog", "stock", { skuId: sku.id, productId: sku.product_id, stock: sku.stock });
         }
       }
+    }
+    if (fromStatus) {
+      logEvent("admin.order_status_changed", req, { orderId: id, from: fromStatus, to: updated.status });
     }
   }
 
@@ -344,10 +372,10 @@ adminRouter.post("/admins", (req, res) => {
   // Role is hardcoded here, never read from the request body — this is the
   // only HTTP path that creates an admin account, and it's gated by
   // requireAdmin above.
-  db.prepare("INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'admin')").run(
-    email,
-    hashPassword(password),
-  );
+  const info = db
+    .prepare("INSERT INTO users (email, password_hash, role) VALUES (?, ?, 'admin')")
+    .run(email, hashPassword(password));
+  logEvent("admin.admin_created", req, { newAdminId: Number(info.lastInsertRowid), email });
 
   res.redirect("/admin");
 });

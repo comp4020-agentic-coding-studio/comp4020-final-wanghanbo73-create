@@ -128,6 +128,59 @@ always returns current truth instead of whatever happened to be buffered.
   customer's open order page; notification count updating live) and the Fly
   redeploy, once done — record the outcome and commit links here.
 
+## Crit 10: multi-user identity, server-side access, and logging
+
+Crit 10 required the deployed app to be demonstrably multi-user: two pod
+members, each in their own Chrome profile sharing no cookies, act on shared
+state while the app tells them apart — with what each may see/change
+checked server-side and written down, and the server logging who did what
+in a way that outlives the crit (readable live via `flyctl logs`).
+
+Fieldmark already had real server-side access control from earlier crits —
+`requireCustomer`/`requireAdmin`, the ownership check on `/orders/:id`, and
+server-recomputed price/stock/limit in `/buy` — so the functional gap for
+this crit was narrower than it first looked: there was no identity write-up
+framed around "what counts as a person" for this brief, and critically,
+*no server-side logging at all* beyond a couple of boot-time
+`console.warn`/`console.log` lines in `db.ts`/`server.ts`. Before writing
+any code, I had Claude read the existing codebase and the Crit 10 brief and
+propose a plan, which I reviewed in plan mode before approving: a person =
+an account (self-registration via the already-linked `/register` page
+satisfies "nothing but the URL"), a small dependency-free `src/logger.ts`
+writing one JSON line per event to stdout, a request-level `http.request`
+log for every request, and action-level logs
+(`auth.register`/`login_success`/`login_failed`/`logout`,
+`order.placed`/`order.rejected`, and the `admin.*` product/stock/order-status/
+admin-creation events) added at the same post-commit, re-read-from-DB point
+the existing `publish(...)` calls already use.
+
+The identity and logging reasoning — why an account is the unit of
+"person," what a customer vs. admin may see/change and where that's
+enforced, why stdout+JSON instead of a logging library, the placement rule
+that mirrors ADR 0002, and what's deliberately never logged (passwords,
+CSRF tokens, full session ids) — is written up in
+[`docs/adr/0003-identity-and-logging.md`](docs/adr/0003-identity-and-logging.md)
+rather than repeated here.
+
+One design decision made mid-implementation: `admin.ts`'s
+`applyStatusChange` transaction originally returned `void`, which meant
+there was no authoritative "from" status available outside the closure for
+the `admin.order_status_changed` log line. Rather than issue a second,
+separate `SELECT` after the transaction (which could theoretically race
+with another admin's write in between), the transaction itself now returns
+the pre-change status it already read — so the log line's `from`/`to` pair
+comes from the exact same read the transaction used to make its decision,
+not a reconstruction.
+
+- TODO (author): commit links for the logging/ADR work, once committed.
+- TODO (author): manual two-browser verification before the crit — register
+  or log in as two different accounts in two separate Chrome profiles, buy
+  down a shared SKU's stock from one, change an order's status as an admin
+  from the other, and confirm `mise exec -- flyctl logs -a <repo>` shows
+  each actor distinctly and every action logged, with no screen-sharing the
+  UI needed to narrate it. Record the outcome (and anything that needed
+  fixing as a result) here once done.
+
 ## Stack rationale
 
 The reasoning behind each stack choice — why `better-sqlite3` over an async
