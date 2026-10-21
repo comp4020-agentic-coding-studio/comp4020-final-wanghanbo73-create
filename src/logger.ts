@@ -23,7 +23,9 @@ function shortSessionId(sessionID: string | undefined): string | undefined {
 }
 
 export function actorFromRequest(req: Request): Actor {
-  const user = req.session.user;
+  // req.session is null/undefined once /logout's req.session.destroy() callback
+  // has run — the "finish" access-log listener below still fires after that.
+  const user = req.session?.user;
   if (user) {
     return { kind: user.role, id: user.id, email: user.email };
   }

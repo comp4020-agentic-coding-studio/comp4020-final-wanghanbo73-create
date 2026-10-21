@@ -10,6 +10,7 @@ import { authRouter } from "./routes/auth-routes.ts";
 import { checkoutRouter } from "./routes/checkout.ts";
 import { ordersRouter } from "./routes/orders.ts";
 import { notificationsRouter } from "./routes/notifications.ts";
+import { aiChatRouter } from "./routes/ai-chat.ts";
 import { adminRouter } from "./routes/admin.ts";
 import { readmeRouter } from "./routes/readme.ts";
 import { eventsRouter } from "./routes/events.ts";
@@ -23,6 +24,9 @@ app.set("trust proxy", 1);
 
 app.use(express.static("public"));
 app.use(express.urlencoded({ extended: false }));
+// Only the AI chat endpoint sends JSON bodies (everything else is form posts) —
+// scoped to its path so the rest of the app's body handling is untouched.
+app.use("/ai-chat/stream", express.json({ limit: "32kb" }));
 
 const sessionSecret = process.env.SESSION_SECRET ?? randomBytes(32).toString("hex");
 if (!process.env.SESSION_SECRET) {
@@ -85,6 +89,7 @@ app.use(authRouter);
 app.use(checkoutRouter);
 app.use(ordersRouter);
 app.use(notificationsRouter);
+app.use(aiChatRouter);
 app.use("/admin", adminRouter);
 app.use(readmeRouter);
 app.use(eventsRouter);

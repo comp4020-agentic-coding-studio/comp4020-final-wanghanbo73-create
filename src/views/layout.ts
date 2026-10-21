@@ -1,5 +1,7 @@
 import type { SessionUser } from "../types.ts";
 import { getUnreadCount } from "../notifications.ts";
+import { isChatAvailable } from "../ai-chat.ts";
+import { aiChatWidget } from "./ai-chat-widget.ts";
 import { escapeHtml, when } from "./html.ts";
 
 export interface LayoutOptions {
@@ -84,7 +86,9 @@ ${body}
   <footer class="site-footer">
     <p>Fieldmark is a course demo storefront. No real payments are taken.</p>
   </footer>
+  ${when(user, aiChatWidget(csrfToken ?? "", isChatAvailable()))}
   <script src="/realtime.js" defer></script>
+  ${when(user, `<script src="/ai-chat-widget.js" defer></script>`)}
 </body>
 </html>`;
 }
