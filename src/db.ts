@@ -176,6 +176,37 @@ function migrateOrdersStatusCheck(): void {
 
 migrateOrdersStatusCheck();
 
+// The 10 catalogue products shipped with placeholder SVG art first; a later
+// change replaced the files with real photos and pointed SEED_PRODUCTS at
+// the new .jpg paths. INSERT OR IGNORE in seed() below never touches an
+// existing row, so any DB file created before this change keeps serving the
+// now-deleted .svg path. This is a one-time, narrowly-scoped fix: only rows
+// still on the exact old placeholder path are touched, so an admin who has
+// since set a custom image_path for one of these products is left alone.
+const PRODUCT_IMAGE_MIGRATIONS: Array<{ slug: string; from: string; to: string }> = [
+  { slug: "classic-tee", from: "/images/classic-tee.svg", to: "/images/classic-tee.jpg" },
+  { slug: "canvas-hoodie", from: "/images/canvas-hoodie.svg", to: "/images/canvas-hoodie.jpg" },
+  { slug: "utility-jacket", from: "/images/utility-jacket.svg", to: "/images/utility-jacket.jpg" },
+  { slug: "relaxed-chinos", from: "/images/relaxed-chinos.svg", to: "/images/relaxed-chinos.jpg" },
+  { slug: "trail-runner", from: "/images/trail-runner.svg", to: "/images/trail-runner.jpg" },
+  { slug: "court-classic", from: "/images/court-classic.svg", to: "/images/court-classic.jpg" },
+  { slug: "drop-puffer", from: "/images/drop-puffer.svg", to: "/images/drop-puffer.jpg" },
+  { slug: "drop-hitops", from: "/images/drop-hitops.svg", to: "/images/drop-hitops.jpg" },
+  { slug: "street-shorts", from: "/images/street-shorts.svg", to: "/images/street-shorts.jpg" },
+  { slug: "cloud-slides", from: "/images/cloud-slides.svg", to: "/images/cloud-slides.jpg" },
+];
+
+function migrateProductImagePaths(): void {
+  const update = db.prepare(
+    "UPDATE products SET image_path = ? WHERE slug = ? AND image_path = ?",
+  );
+  for (const m of PRODUCT_IMAGE_MIGRATIONS) {
+    update.run(m.to, m.slug, m.from);
+  }
+}
+
+migrateProductImagePaths();
+
 interface SeedSku {
   color: string;
   size: string;
