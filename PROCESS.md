@@ -1,272 +1,122 @@
 # Process overview
 
-This describes how Fieldmark — the storefront app in this repo — went from
-the final project brief to a running, tested implementation, and what's still
-left for me to do by hand before submission.
+This describes Fieldmark — the storefront in this repo — as it stands now,
+not as a log of every step taken to get here. It's rewritten at each crit
+rather than appended to, per the brief, so commit links below are citations
+for specific claims, not a full history.
 
-## Starting point
+## Approach
 
-The brief asks for a small e-commerce app with real access control and real
-inventory correctness, deployed on the course's Fly setup, with the harness
-(`spec/invariants.test.ts`, `fly.toml`'s machine/volume shape, the CI
-workflow) left as the fixed contract and everything else — stack, schema,
-views, routes — mine to decide.
+Before any application code existed, I worked with Claude to produce a
+written plan: the full stack decision, the database schema, the complete
+route list and what each route guards against, and a verification plan
+(typecheck, HTTP-level spec tests against the real running app, a Docker
+build matching CI, a Fly deploy). Deciding the stack and the invariants
+up front meant implementation was mostly mechanical, and gave me something
+concrete to check generated code against rather than reviewing it on vibes.
+Each later crit followed the same shape — read the existing codebase and the
+crit brief, have Claude propose a plan, approve or redirect it in plan mode,
+then implement — rather than iterating code first and explaining it after.
 
-Before writing any application code, I worked with Claude to produce a single
-written plan covering: the full tech-stack decision (Express 5,
-`better-sqlite3`, `express-session` with a custom SQLite-backed store,
-`csrf-sync`, Node's built-in `crypto.scrypt`, `marked`, hand-written
-template-literal views, no bundler — the app runs as `node src/server.ts`
-using Node 24's native TypeScript stripping); the full database schema
-(users, products, skus, orders, order_items, sessions); the complete route
-list and what each one guards against; and a verification plan (typecheck,
-spec tests against the real running app, a Docker build matching CI, and a
-Fly deploy). Deciding the stack and the invariants up front, before any code
-existed, meant the implementation step was mostly mechanical — and meant I
-had something concrete to check the generated code against, rather than
-reviewing it against vibes.
+## Architecture, and why it's "good" here
 
-## Implementation
+The stack (Express 5, `better-sqlite3`, `express-session` with a custom
+SQLite-backed store, `csrf-sync`, Node's `crypto.scrypt`, hand-written
+template-literal views, no bundler) is reasoned about in
+[`docs/adr/0001-stack.md`](docs/adr/0001-stack.md). The short version: the
+deploy has exactly one Fly machine, one volume, no separate DB service, so
+SQLite's synchronous API is what turns "check stock, decrement, insert
+order" into a single `db.transaction(...)` call with no `await` inside it —
+the native binding serialises that against every other request on the same
+connection, which is the entire no-oversell guarantee, with no
+application-level locking to get wrong.
 
-I then had Claude implement the plan directly against this repo: the DB
-layer and seed data, auth (password hashing, session middleware, CSRF, role
-guards), the hand-written views, the catalogue/checkout/orders/admin routes,
-`server.ts` wiring, the Dockerfile, and a full `spec/*.test.ts` suite
-exercising the invariants the brief cares about — role hard-coding at
-registration, ownership checks on orders and `/admin`, server-computed
-pricing and stock on `/buy`, no-oversell under concurrent purchases,
-idempotency-key deduplication on repeated submits, and release-time/
-per-account-limit enforcement on limited drops.
+Real-time push (Crit 9) is Server-Sent Events over an in-process pub/sub hub
+(`src/realtime.ts`), with `publish(...)` calls placed immediately after each
+`db.transaction(...)` commits — never inside it, never built from
+request-body values. The one concurrency decision this required — that live
+push only patches read-only elements (stock figures, status badges, the
+notification count) and never writes into an open form — is in
+[`docs/adr/0002-realtime-concurrency.md`](docs/adr/0002-realtime-concurrency.md).
+Landed in [`97270d1`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-wanghanbo73-create/commit/97270d1).
 
-Two things from that pass are worth recording because they're the kind of
-bug that only shows up once you run the thing, not while reading the plan:
+Multi-user identity (Crit 10) treats a person as an account — self-registration
+through the already-linked `/register` page is sufficient for "nothing but
+the URL." Access control predates this crit (ownership checks on orders,
+`requireAdmin` on `/admin`, server-recomputed price/stock on `/buy`); what
+Crit 10 added was `src/logger.ts`, a dependency-free JSON-line logger writing
+one `http.request` line per request plus action events
+(`auth.*`, `order.*`, `admin.*`), placed after the same post-commit point
+`publish(...)` already uses, and the write-up of why each access check is
+safe, in
+[`docs/adr/0003-identity-and-logging.md`](docs/adr/0003-identity-and-logging.md).
+Landed in [`d3bdb71`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-wanghanbo73-create/commit/d3bdb71).
 
-- **Express 5 router mounting.** `admin.ts`'s router called
-  `router.use(requireAdmin)` with no path prefix, and was itself mounted with
-  `app.use(adminRouter)` — also with no prefix. Express applies an
-  un-prefixed router's own middleware to *every* request that reaches it,
-  regardless of which route inside it eventually matches, so `requireAdmin`
-  was silently gating unrelated routes like `/readme/` that happened to be
-  registered after the admin router. The fix was to give the admin routes
-  relative paths (`/`, `/products`, `/orders/:id/status`, …) and mount the
-  router at `app.use("/admin", adminRouter)` instead of bare `app.use`.
-- **DATA_DIR inside the container.** `src/db.ts` defaults to `./data` when
-  `DATA_DIR` isn't set. `fly.toml` mounts the persistent volume at `/data`,
-  but the Dockerfile never set `DATA_DIR=/data`, so a deployed container
-  would have quietly written its SQLite file to `/app/data` — inside the
-  image's writable layer, not the volume — and lost every order and stock
-  change on the next redeploy. Caught by re-reading the Dockerfile against
-  `fly.toml`'s comment about what `/data` is for, not by a failing test.
+## Bugs that only showed up at runtime
 
-## Verification
+Three are worth naming because reading the plan wouldn't have caught them:
 
-`pnpm typecheck` runs clean under `strict: true` with
-`verbatimModuleSyntax: true`. The full spec suite — the untouched
-`spec/invariants.test.ts` plus six new files (`auth`, `access-control`,
-`purchase`, `inventory`, `idempotency`, `limited-sale`) — passed in full
-against the app started with `DATA_DIR=./data-dev PORT=8080
-ADMIN_EMAIL=admin@example.com ADMIN_PASSWORD=devpassword123 node
-src/server.ts`, and stayed green on a second run without resetting the
-database, which matters because the suite deliberately shares one
-non-reset SQLite file the way the deployed app would across redeploys. Three
-rounds of test flakiness during that work each had a distinct cause worth
-naming rather than papering over: colliding customer emails generated from a
-per-file counter (fixed by generating each test account's email from
-`crypto.randomUUID()`), spec files racing each other for the same shared
-product stock when Vitest ran them in parallel (fixed by setting
-`fileParallelism: false` in `vitest.config.ts`, which the brief leaves open
-to edit), and a stock-exhaustion false negative from an earlier local run
-having already drained a SKU the concurrency test needed at a specific
-count (fixed with a small admin-login-and-restock helper the test calls
-before it depends on exact stock numbers).
+- **Express 5 router mounting.** `admin.ts` called `router.use(requireAdmin)`
+  with no path prefix and was itself mounted with bare `app.use(adminRouter)`.
+  Express applies an un-prefixed router's middleware to every request that
+  reaches it, so `requireAdmin` was silently gating unrelated routes like
+  `/readme/` registered after it. Fixed by giving admin routes relative paths
+  and mounting at `app.use("/admin", adminRouter)`.
+- **`DATA_DIR` inside the container.** `src/db.ts` defaults to `./data`;
+  `fly.toml` mounts the persistent volume at `/data`, but the Dockerfile
+  never set `DATA_DIR=/data`, so a deployed container would have written its
+  SQLite file into the image's writable layer and lost every order on the
+  next redeploy. Caught by re-reading the Dockerfile against `fly.toml`'s
+  comment, not by a failing test.
+- **Logging the wrong path.** `http.request` originally read `req.path`
+  inside `res.on('finish')`. Express rewrites `req.url` (which `req.path`
+  views) while a request is inside a path-prefixed sub-router, so a denied
+  request to `/admin/products` logged `path: "/products"` — correct status,
+  wrong evidence. Caught by deliberately sending a non-admin session at
+  `/admin/products` and reading the log tail, not by reading the code. Fixed
+  by capturing `req.originalUrl` before `next()` runs.
+  ([`53c5187`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-wanghanbo73-create/commit/53c5187))
 
-- TODO (author): Docker build/run verification against the exact CI
-  sequence, and the Fly deploy itself, happen after this file is written —
-  record the outcome and commit links here once that's done.
+## Verification, as it stands
 
-## Crit 9: real-time and concurrent use
+`pnpm typecheck` is clean under `strict: true` with `verbatimModuleSyntax:
+true`. The spec suite — the untouched `spec/invariants.test.ts` plus files
+covering auth, access control, purchase, inventory, idempotency, limited
+sales, and the AI chat widget — passes against the app started with
+`DATA_DIR=./data-dev PORT=8080 ADMIN_EMAIL=... ADMIN_PASSWORD=... node
+src/server.ts`, including against a database that already has state from a
+prior run, matching how the deployed app persists across redeploys.
+Multi-user behaviour was checked against the deployed app
+(`comp4020-final-wanghanbo73-create.fly.dev`) with two independent cookie
+jars acting as two separate browser sessions, narrated entirely from
+`flyctl logs`: distinct actors from first request onward, a 404 on another
+account's order, a 403 on `/admin` for a non-admin account, each logged with
+the correct path and actor. That check is what surfaced the logging bug
+above — a real bug caught by reading output, not by trusting the code.
 
-Crit 9 required the deployed app to push a change made by one person to every
-other open session within about a second, with no reload, plus a written
-decision about how the app behaves with several people in it at once.
+## Outside the three crits
 
-Before writing any code for this, I had Claude read through the whole
-existing codebase again (routes, views, the purchase transaction, the
-notification/order-event tables already in place from the previous crit)
-rather than guessing at the shape of things from memory, then had it propose
-and I approved a plan: Server-Sent Events over a small in-process pub/sub hub
-(`src/realtime.ts`), a `GET /events` endpoint that subscribes a connection to
-a public `catalog` channel plus a per-user channel and (for admins) an
-`admin` channel, and `publish(...)` calls added immediately after each
-existing `db.transaction(...)` call succeeds in `checkout.ts` and
-`admin.ts` — never inside the transaction, and always built from a
-freshly re-read row rather than anything computed mid-transaction or taken
-from the request. That placement matters: it's what keeps the live layer
-from ever being able to announce something that didn't actually commit,
-which is the same "server state is authoritative" rule the purchase flow
-already followed.
+Two pieces of work sit outside the Crit 9/10 cycle. First, catalogue
+artwork and two new products (Street Shorts, Cloud Slides) were added the
+same way every seed product is — appended to `SEED_PRODUCTS`, inserted via
+the existing `INSERT OR IGNORE` step, so a redeploy adds the new rows
+without touching existing stock or orders
+([`4a5e1aa`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-wanghanbo73-create/commit/4a5e1aa)).
+Second, an AI customer-service widget: a floating chat panel, mounted once
+in `layout()` for every signed-in page, backed by `POST /ai-chat/stream`.
+It runs a local Ollama model in development and the Anthropic API in
+production behind one `AI_BACKEND`-switched interface, because the
+production Fly machine's 256 MB budget can't host a local model — this
+follows the same "the deploy shape decides the architecture" reasoning as
+ADR 0001. This is additive to the brief, not a substitute for any of its
+three required properties (multi-user, real-time, persists), which the
+storefront flows above already satisfy independently of it.
 
-The one concurrency decision this crit asked for — written up in
-[`docs/adr/0002-realtime-concurrency.md`](docs/adr/0002-realtime-concurrency.md)
-— is that live push only patches read-only elements (stock figures, SOLD OUT
-state, order status badges, the notification count, the admin order queue);
-it never writes into an open form. Two admins racing to change the same
-order's status still resolve through the status-change transaction that
-already existed (last write wins, a same-status write is a no-op via the
-existing guard in `applyStatusChange`), and the broadcast afterwards is what
-makes every open tab converge on the true value, not either admin's
-assumption of what they clicked.
+## What's still mine to do by hand
 
-A deliberate scope cut: reconnect behaviour uses a small `GET
-/events/resync` fetch (keyed off whatever SKU/order ids are already on the
-page) on every `EventSource` "open" event, rather than an in-memory
-event-replay buffer — simpler, and strictly more correct, since resync
-always returns current truth instead of whatever happened to be buffered.
-
-- TODO (author): manual multi-tab verification (buy-down-to-sold-out in one
-  tab reflected live in another; admin status change/cancel reflected on a
-  customer's open order page; notification count updating live) and the Fly
-  redeploy, once done — record the outcome and commit links here.
-
-## Crit 10: multi-user identity, server-side access, and logging
-
-Crit 10 required the deployed app to be demonstrably multi-user: two pod
-members, each in their own Chrome profile sharing no cookies, act on shared
-state while the app tells them apart — with what each may see/change
-checked server-side and written down, and the server logging who did what
-in a way that outlives the crit (readable live via `flyctl logs`).
-
-Fieldmark already had real server-side access control from earlier crits —
-`requireCustomer`/`requireAdmin`, the ownership check on `/orders/:id`, and
-server-recomputed price/stock/limit in `/buy` — so the functional gap for
-this crit was narrower than it first looked: there was no identity write-up
-framed around "what counts as a person" for this brief, and critically,
-*no server-side logging at all* beyond a couple of boot-time
-`console.warn`/`console.log` lines in `db.ts`/`server.ts`. Before writing
-any code, I had Claude read the existing codebase and the Crit 10 brief and
-propose a plan, which I reviewed in plan mode before approving: a person =
-an account (self-registration via the already-linked `/register` page
-satisfies "nothing but the URL"), a small dependency-free `src/logger.ts`
-writing one JSON line per event to stdout, a request-level `http.request`
-log for every request, and action-level logs
-(`auth.register`/`login_success`/`login_failed`/`logout`,
-`order.placed`/`order.rejected`, and the `admin.*` product/stock/order-status/
-admin-creation events) added at the same post-commit, re-read-from-DB point
-the existing `publish(...)` calls already use.
-
-The identity and logging reasoning — why an account is the unit of
-"person," what a customer vs. admin may see/change and where that's
-enforced, why stdout+JSON instead of a logging library, the placement rule
-that mirrors ADR 0002, and what's deliberately never logged (passwords,
-CSRF tokens, full session ids) — is written up in
-[`docs/adr/0003-identity-and-logging.md`](docs/adr/0003-identity-and-logging.md)
-rather than repeated here.
-
-One design decision made mid-implementation: `admin.ts`'s
-`applyStatusChange` transaction originally returned `void`, which meant
-there was no authoritative "from" status available outside the closure for
-the `admin.order_status_changed` log line. Rather than issue a second,
-separate `SELECT` after the transaction (which could theoretically race
-with another admin's write in between), the transaction itself now returns
-the pre-change status it already read — so the log line's `from`/`to` pair
-comes from the exact same read the transaction used to make its decision,
-not a reconstruction.
-
-Logging and the ADR landed in
-[`d3bdb71`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-wanghanbo73-create/commit/d3bdb71);
-deployed to `comp4020-final-wanghanbo73-create.fly.dev` and checked against
-the live app with two independent cookie jars acting as two separate
-browser sessions (same no-shared-cookies property as two Chrome profiles —
-each jar gets its own session cookie from the server, nothing shared
-client-side). That check caught a real bug:
-[`53c5187`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-wanghanbo73-create/commit/53c5187)
-fixes it.
-
-**The bug, caught by actually reading the log tail rather than trusting the
-code:** the `http.request` middleware read `req.path` inside the
-`res.on('finish')` callback. Express rewrites `req.url` (which `req.path` is
-a live view of) while a request is inside a path-prefixed sub-router —
-`/admin` is mounted with `app.use("/admin", adminRouter)` — so by the time
-a request to `/admin/products` finished, the log line reported `path:
-"/products"` or even `"/"`, depending on how deep the matched route was.
-Reading the log tail while deliberately sending a non-admin session at
-`/admin/products` is what surfaced it: the request correctly 403'd, but the
-log line describing *what* was denied was wrong, which defeats the entire
-point of narrating from logs. The fix captures `req.originalUrl` — set once
-per request and never rewritten by nested routers — before `next()` runs,
-rather than reading a value that changes meaning over the request's
-lifetime.
-
-**Verification performed, against the deployed app, via `mise exec --
-flyctl logs -a comp4020-final-wanghanbo73-create`:**
-
-- Two separate sessions (`personA`, `personB`) each self-registered through
-  `/register` with no shared cookie state between them — the log showed
-  each getting a distinct, truncated anonymous session id before
-  registering, then a distinct `{ kind: "customer", id, email }` actor
-  immediately after, confirmed by matching `auth.register` lines to
-  different `userId`s (13 and 14 in the run checked).
-- Person A requesting `/orders/1` — an order that belongs to neither of
-  them — got a 404, logged as `"path":"/orders/1","status":404` under
-  Person A's own actor, not under whoever actually owns order 1: the
-  ownership check in `src/routes/orders.ts` is confirmed working from the
-  outside, not just by reading the code.
-- Person B requesting `/admin` and `/admin/products` got a 403 both times,
-  logged with the correct path after the fix above (`"path":"/admin"`,
-  `"path":"/admin/products"`) and Person B's own customer actor — so a
-  narrator reading only the log tail can state, correctly, "customer 14
-  just tried to reach admin and was blocked," which is exactly what the
-  crit's no-UI narration requirement needs.
-- A full register → login-failure → login-success → buy → reject-oversell
-  → admin-status-change pass run locally against a from-scratch database
-  produced one correctly-attributed log line per action with no gaps (see
-  the `pnpm test` run below) before the same code was deployed and spot
-  checked live.
-
-Remaining limitation, noted rather than hidden: this verification used
-`curl` with independent cookie jars rather than two literal Chrome
-profiles, since that's what was available non-interactively; the property
-being tested (no shared client-side state, server tells sessions apart) is
-the same either way, but the actual crit still needs the real two-profile
-run with a human narrating live, which this doesn't substitute for.
-
-## Stack rationale
-
-The reasoning behind each stack choice — why `better-sqlite3` over an async
-driver, why a hand-rolled session store instead of a library default, why no
-bundler — is written up separately in
-[`docs/adr/0001-stack.md`](docs/adr/0001-stack.md) rather than repeated here.
-
-## Catalogue artwork and two new products
-
-Outside of a crit cycle, I had Claude replace the plain-text placeholder SVGs
-in `public/images/` with small hand-drawn silhouette illustrations (a t-shirt
-outline, a hoodie with a drawstring, a jacket with pocket details, a shoe
-sole, etc.) in the same flat two-colour style, and add two new regular-sale
-products — Street Shorts and Cloud Slides — each with its own SVG and a few
-colour/size SKUs, seeded the same way every other product is: appended to
-`SEED_PRODUCTS` in `src/db.ts`, inserted via the existing `INSERT OR IGNORE`
-seed step, so a redeploy against an existing volume adds the two new rows
-without touching stock or orders already on disk.
-
-Verified locally first — `pnpm typecheck` clean, then the app started with
-the usual `DATA_DIR=./data-dev` command and the homepage HTML checked over
-`curl` for both new `<img>` tags before anything was committed — then
-committed together with the already-unstaged artwork swap
-([`4a5e1aa`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-wanghanbo73-create/commit/4a5e1aa))
-and pushed, which ran the `checks` CI workflow and redeployed
-`comp4020-final-wanghanbo73-create.fly.dev` automatically; confirmed live
-on the deployed site afterwards.
-
-## What's mine to still add
-
-- Crit 10's commit links are now in place above
-  ([`d3bdb71`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-wanghanbo73-create/commit/d3bdb71),
-  [`53c5187`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-wanghanbo73-create/commit/53c5187)).
-  The Docker/Fly-deploy TODO after the "Verification" section and the Crit 9
-  multi-tab-verification TODO above are still mine to fill in by hand.
-- TODO (author): anything about working with an agent on this brief that
-  isn't captured by the mechanical account above — what I'd have done
-  differently, what I didn't fully understand before I saw it run, and
-  anything that surprised me about where the agent's output needed
-  correcting versus where it didn't.
+The Crit 9 multi-tab verification (buy-down-to-sold-out reflected live in a
+second tab, admin status change reflected on an open customer order page)
+and the real two-Chrome-profile run for Crit 10 — narrated live rather than
+via two `curl` cookie jars, which is what the automated check above
+substitutes for non-interactively — still need to happen in person before
+submission.
