@@ -15,11 +15,22 @@ export function aiChatWidget(csrfToken: string, available: boolean): string {
     >
       <svg class="ai-chat-widget__icon" viewBox="0 0 24 24" fill="none" aria-hidden="true" focusable="false">
         <path
-          d="M4 5h16v11H9l-4 4V5z"
+          d="M4 13v-2a8 8 0 0 1 16 0v2"
           stroke="currentColor"
           stroke-width="1.8"
-          stroke-linejoin="round"
+          stroke-linecap="round"
         />
+        <rect x="2.5" y="12" width="3.5" height="6" rx="1.5" fill="currentColor" />
+        <rect x="18" y="12" width="3.5" height="6" rx="1.5" fill="currentColor" />
+        <text
+          x="12"
+          y="12.5"
+          text-anchor="middle"
+          font-size="6"
+          font-weight="700"
+          fill="currentColor"
+          font-family="inherit"
+        >AI</text>
       </svg>
     </button>
     <div id="ai-chat-panel" class="ai-chat-widget__panel" hidden role="dialog" aria-label="AI customer service chat">

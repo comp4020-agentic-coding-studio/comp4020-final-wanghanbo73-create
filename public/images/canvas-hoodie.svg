@@ -1,8 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240" role="img" aria-label="Canvas Hoodie">
-  <rect width="320" height="240" fill="#3a3a3a"/>
-  <path d="M160 35 C140 35 128 48 128 62 L100 80 L112 102 L128 92 L128 185 L192 185 L192 92 L208 102 L220 80 L192 62 C192 48 180 35 160 35 Z"
-        fill="#d9d9d9" stroke="#1f1f1f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
-  <path d="M142 62 C142 78 150 88 160 88 C170 88 178 78 178 62" fill="none" stroke="#1f1f1f" stroke-width="3"/>
-  <rect x="140" y="150" width="40" height="22" rx="4" fill="none" stroke="#1f1f1f" stroke-width="2.5"/>
-  <text x="160" y="216" font-family="sans-serif" font-size="18" fill="#ffffff" text-anchor="middle">Canvas Hoodie</text>
-</svg>

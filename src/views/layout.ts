@@ -19,6 +19,12 @@ export function layout({ title, user, csrfToken, body }: LayoutOptions): string 
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>${escapeHtml(title)} — Fieldmark</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link
+    href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;600;700;800&family=Inter:wght@400;500;600&display=swap"
+    rel="stylesheet"
+  />
   <link rel="stylesheet" href="/styles.css" />
 </head>
 <body>
@@ -68,13 +74,16 @@ export function layout({ title, user, csrfToken, body }: LayoutOptions): string 
           ${
             user
               ? `<li>
+                  <span class="user-chip" aria-hidden="true">${escapeHtml(user.email.charAt(0).toUpperCase())}</span>
+                </li>
+                <li>
                   <form method="post" action="/logout" class="inline-form">
                     <input type="hidden" name="_csrf" value="${escapeHtml(csrfToken ?? "")}" />
                     <span class="nav-user">${escapeHtml(user.email)}</span>
                     <button type="submit" class="link-button">Log out</button>
                   </form>
                 </li>`
-              : `<li><a href="/login" class="button button--outline">Log in</a></li><li><a href="/register" class="button button--primary">Register</a></li>`
+              : `<li><a href="/login">Log in</a></li><li aria-hidden="true" class="nav-divider">/</li><li><a href="/register">Register</a></li>`
           }
         </ul>
       </nav>

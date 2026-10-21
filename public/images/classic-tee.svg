@@ -1,6 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240" role="img" aria-label="Classic Tee">
-  <rect width="320" height="240" fill="#2e5339"/>
-  <path d="M120 55 L140 45 L160 55 L180 45 L200 55 L225 80 L205 100 L195 90 L195 185 L125 185 L125 90 L115 100 L95 80 Z"
-        fill="#eef3ee" stroke="#1d3826" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
-  <text x="160" y="216" font-family="sans-serif" font-size="18" fill="#ffffff" text-anchor="middle">Classic Tee</text>
-</svg>

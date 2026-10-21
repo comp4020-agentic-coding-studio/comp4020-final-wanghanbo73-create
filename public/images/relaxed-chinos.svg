@@ -1,7 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240" role="img" aria-label="Relaxed Chinos">
-  <rect width="320" height="240" fill="#6b5a3a"/>
-  <path d="M128 45 L192 45 L198 100 L212 185 L182 185 L164 110 L156 110 L138 185 L108 185 L122 100 Z"
-        fill="#f1e9d8" stroke="#43361f" stroke-width="3" stroke-linejoin="round" stroke-linecap="round"/>
-  <line x1="160" y1="45" x2="160" y2="100" stroke="#43361f" stroke-width="2.5"/>
-  <text x="160" y="216" font-family="sans-serif" font-size="18" fill="#ffffff" text-anchor="middle">Relaxed Chinos</text>
-</svg>

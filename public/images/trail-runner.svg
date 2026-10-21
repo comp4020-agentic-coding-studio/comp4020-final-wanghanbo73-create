@@ -1,9 +1,0 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="320" height="240" viewBox="0 0 320 240" role="img" aria-label="Trail Runner">
-  <rect width="320" height="240" fill="#333333"/>
-  <path d="M85 150 C85 130 100 118 120 116 L160 108 L200 118 C215 121 225 112 235 118 C244 123 246 136 238 142 L238 150 L85 150 Z"
-        fill="#e67e22" stroke="#1d1d1d" stroke-width="3" stroke-linejoin="round"/>
-  <path d="M85 150 L238 150 L238 162 C238 168 232 172 226 172 L97 172 C91 172 85 168 85 162 Z"
-        fill="#1d1d1d"/>
-  <path d="M120 118 L132 134 M150 112 L160 132 M180 115 L188 134" stroke="#1d1d1d" stroke-width="3" stroke-linecap="round"/>
-  <text x="160" y="216" font-family="sans-serif" font-size="18" fill="#ffffff" text-anchor="middle">Trail Runner</text>
-</svg>

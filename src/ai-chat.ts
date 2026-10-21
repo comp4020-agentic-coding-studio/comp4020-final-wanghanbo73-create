@@ -1,7 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { Response } from "express";
 import { db } from "./db.ts";
-import type { OrderItemRow, OrderRow, SessionUser, SkuRow } from "./types.ts";
+import type { OrderEventRow, OrderItemRow, OrderRow, SessionUser, SkuRow } from "./types.ts";
 
 // Keeps the loop from running away on tool-call ping-pong, and keeps a single
 // reply's cost bounded regardless of what the model decides to do.
@@ -121,9 +121,56 @@ function getProductStock(query: string): unknown {
   });
 }
 
+// Same ownership rule as GET /orders/:id in routes/orders.ts: not-found and
+// not-mine return the identical "no order found" shape, never leaking which
+// case it was.
+function getOrderDetail(orderId: number, userId: number): unknown {
+  const order = db.prepare<[number], OrderRow>("SELECT * FROM orders WHERE id = ?").get(orderId);
+
+  if (!order || order.user_id !== userId) {
+    return { error: "No order found with that id." };
+  }
+
+  const items = db
+    .prepare<[number], OrderItemRow>("SELECT * FROM order_items WHERE order_id = ?")
+    .all(order.id);
+  const events = db
+    .prepare<[number], OrderEventRow>(
+      "SELECT * FROM order_events WHERE order_id = ? ORDER BY id ASC",
+    )
+    .all(order.id);
+
+  return {
+    id: order.id,
+    status: order.status,
+    created_at: order.created_at,
+    items: items.map((item) => ({
+      product: item.product_name_snapshot,
+      color: item.color_snapshot,
+      size: item.size_snapshot,
+      quantity: item.quantity,
+      unit_price_cents: item.unit_price_cents_snapshot,
+    })),
+    history: events.map((event) => ({ type: event.type, message: event.message, at: event.created_at })),
+  };
+}
+
+// Static policy text kept server-side so the model states the official
+// wording verbatim instead of improvising one, especially on the small local
+// Ollama model.
+const RETURN_POLICY_TEXT =
+  "All sales are final. Fieldmark does not accept returns or exchanges on any order, " +
+  "regardless of size, color, or reason.";
+
+function getReturnPolicy(): unknown {
+  return { policy: RETURN_POLICY_TEXT };
+}
+
 function runTool(name: string, input: Record<string, unknown>, user: SessionUser): unknown {
   if (name === "get_my_orders") return getMyOrders(user.id);
   if (name === "get_product_stock") return getProductStock(String(input.query ?? ""));
+  if (name === "get_order_detail") return getOrderDetail(Number(input.order_id), user.id);
+  if (name === "get_return_policy") return getReturnPolicy();
   return { error: `unknown tool: ${name}` };
 }
 
@@ -168,6 +215,24 @@ const anthropicTools: Anthropic.Tool[] = [
       required: ["query"],
       additionalProperties: false,
     },
+  },
+  {
+    name: "get_order_detail",
+    description:
+      "Look up the signed-in customer's own order by its order id, including status history. Returns an error if no such order exists for this customer.",
+    input_schema: {
+      type: "object",
+      properties: {
+        order_id: { type: "integer", description: "The numeric order id to look up" },
+      },
+      required: ["order_id"],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: "get_return_policy",
+    description: "Look up Fieldmark's return/exchange policy. Takes no input.",
+    input_schema: { type: "object", properties: {}, additionalProperties: false },
   },
 ];
 
@@ -249,6 +314,29 @@ const ollamaTools = [
         },
         required: ["query"],
       },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_order_detail",
+      description:
+        "Look up the signed-in customer's own order by its order id, including status history. Returns an error if no such order exists for this customer.",
+      parameters: {
+        type: "object",
+        properties: {
+          order_id: { type: "integer", description: "The numeric order id to look up" },
+        },
+        required: ["order_id"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "get_return_policy",
+      description: "Look up Fieldmark's return/exchange policy. Takes no input.",
+      parameters: { type: "object", properties: {}, required: [] },
     },
   },
 ];

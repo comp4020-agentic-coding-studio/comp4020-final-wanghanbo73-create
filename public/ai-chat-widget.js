@@ -47,15 +47,29 @@
   });
 
   function appendMessage(role, text) {
-    var wrapper = document.createElement("p");
-    wrapper.className = "ai-chat-message ai-chat-message--" + role;
-    var label = document.createElement("strong");
-    label.textContent = role === "user" ? "You: " : "Assistant: ";
-    wrapper.appendChild(label);
+    var row = document.createElement("div");
+    row.className = "ai-chat-row ai-chat-row--" + role;
+
+    var avatar = document.createElement("div");
+    avatar.className = "ai-chat-avatar ai-chat-avatar--" + role;
+    avatar.setAttribute("aria-hidden", "true");
+    avatar.textContent = role === "user" ? "Y" : "AI";
+
+    var bubble = document.createElement("div");
+    bubble.className = "ai-chat-bubble ai-chat-bubble--" + role;
+
+    var label = document.createElement("span");
+    label.className = "visually-hidden";
+    label.textContent = role === "user" ? "You said: " : "Assistant said: ";
+    bubble.appendChild(label);
+
     var span = document.createElement("span");
     span.textContent = text;
-    wrapper.appendChild(span);
-    log.appendChild(wrapper);
+    bubble.appendChild(span);
+
+    row.appendChild(avatar);
+    row.appendChild(bubble);
+    log.appendChild(row);
     log.scrollTop = log.scrollHeight;
     return span;
   }

@@ -207,7 +207,7 @@ const SEED_PRODUCTS: SeedProduct[] = [
     sale_type: "regular",
     release_at: null,
     per_account_limit: null,
-    image_path: "/images/classic-tee.svg",
+    image_path: "/images/classic-tee.jpg",
     skus: [
       { color: "Black", size: "S", stock: 12 },
       { color: "Black", size: "M", stock: 8 },
@@ -223,7 +223,7 @@ const SEED_PRODUCTS: SeedProduct[] = [
     sale_type: "regular",
     release_at: null,
     per_account_limit: null,
-    image_path: "/images/canvas-hoodie.svg",
+    image_path: "/images/canvas-hoodie.jpg",
     skus: [
       { color: "Grey", size: "M", stock: 10 },
       { color: "Grey", size: "L", stock: 6 },
@@ -239,7 +239,7 @@ const SEED_PRODUCTS: SeedProduct[] = [
     sale_type: "regular",
     release_at: null,
     per_account_limit: null,
-    image_path: "/images/utility-jacket.svg",
+    image_path: "/images/utility-jacket.jpg",
     skus: [
       { color: "Olive", size: "M", stock: 7 },
       { color: "Olive", size: "L", stock: 3 },
@@ -254,7 +254,7 @@ const SEED_PRODUCTS: SeedProduct[] = [
     sale_type: "regular",
     release_at: null,
     per_account_limit: null,
-    image_path: "/images/relaxed-chinos.svg",
+    image_path: "/images/relaxed-chinos.jpg",
     skus: [
       { color: "Khaki", size: "30", stock: 9 },
       { color: "Khaki", size: "32", stock: 9 },
@@ -270,7 +270,7 @@ const SEED_PRODUCTS: SeedProduct[] = [
     sale_type: "regular",
     release_at: null,
     per_account_limit: null,
-    image_path: "/images/trail-runner.svg",
+    image_path: "/images/trail-runner.jpg",
     skus: [
       { color: "Charcoal", size: "9", stock: 5 },
       { color: "Charcoal", size: "10", stock: 5 },
@@ -286,7 +286,7 @@ const SEED_PRODUCTS: SeedProduct[] = [
     sale_type: "regular",
     release_at: null,
     per_account_limit: null,
-    image_path: "/images/court-classic.svg",
+    image_path: "/images/court-classic.jpg",
     skus: [
       { color: "White", size: "9", stock: 8 },
       { color: "White", size: "10", stock: 8 },
@@ -301,7 +301,7 @@ const SEED_PRODUCTS: SeedProduct[] = [
     sale_type: "limited",
     release_at: FUTURE_RELEASE,
     per_account_limit: 1,
-    image_path: "/images/drop-puffer.svg",
+    image_path: "/images/drop-puffer.jpg",
     skus: [
       { color: "Black", size: "M", stock: 4 },
       { color: "Black", size: "L", stock: 4 },
@@ -316,7 +316,7 @@ const SEED_PRODUCTS: SeedProduct[] = [
     sale_type: "limited",
     release_at: new Date(Date.now() - 1000 * 60 * 60).toISOString(),
     per_account_limit: 2,
-    image_path: "/images/drop-hitops.svg",
+    image_path: "/images/drop-hitops.jpg",
     skus: [
       { color: "Cream", size: "9", stock: 3 },
       { color: "Cream", size: "10", stock: 3 },
@@ -331,7 +331,7 @@ const SEED_PRODUCTS: SeedProduct[] = [
     sale_type: "regular",
     release_at: null,
     per_account_limit: null,
-    image_path: "/images/street-shorts.svg",
+    image_path: "/images/street-shorts.jpg",
     skus: [
       { color: "Navy", size: "M", stock: 10 },
       { color: "Navy", size: "L", stock: 7 },
@@ -347,7 +347,7 @@ const SEED_PRODUCTS: SeedProduct[] = [
     sale_type: "regular",
     release_at: null,
     per_account_limit: null,
-    image_path: "/images/cloud-slides.svg",
+    image_path: "/images/cloud-slides.jpg",
     skus: [
       { color: "Green", size: "9", stock: 11 },
       { color: "Green", size: "10", stock: 9 },

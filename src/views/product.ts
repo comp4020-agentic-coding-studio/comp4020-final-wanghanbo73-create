@@ -48,7 +48,7 @@ export function productPage({ product, skus, isLive }: ProductPageOptions): stri
     <div class="product-detail__info">
       <p class="product-card__category">${escapeHtml(product.category)}</p>
       <h1 data-product-name>${escapeHtml(product.name)}</h1>
-      <p class="product-detail__price">${money(product.price_cents)}</p>
+      <p class="product-detail__price${product.sale_type === "limited" ? " product-detail__price--limited" : ""}">${money(product.price_cents)}</p>
       <p>${escapeHtml(product.description)}</p>
       ${limitedNotice}
       ${when(!isLive, `<p class="notice notice--error">This item is not available for purchase yet.</p>`)}
