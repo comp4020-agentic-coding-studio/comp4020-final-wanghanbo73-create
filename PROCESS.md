@@ -76,6 +76,20 @@ Three are worth naming because reading the plan wouldn't have caught them:
   `/admin/products` and reading the log tail, not by reading the code. Fixed
   by capturing `req.originalUrl` before `next()` runs.
   ([`53c5187`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-wanghanbo73-create/commit/53c5187))
+- **Stale `image_path` on a deployed DB after swapping placeholder art for
+  real photos.** Seeding is deliberately `INSERT OR IGNORE`
+  (`CLAUDE.md`'s non-destructive-seeding rule) so it never touches a row
+  that already exists. Replacing the 10 SVG placeholders with real product
+  photos and deleting the old files from `public/images/` worked locally
+  against a fresh DB, but the already-deployed Fly volume's `products` table
+  predated the change — its rows still pointed at the now-deleted `.svg`
+  paths, so production served broken image links while every other
+  environment looked fine. Caught by checking the deployed site after
+  deploy, not by the spec suite (which seeds fresh). Fixed with a narrow,
+  one-time migration mirroring `migrateOrdersStatusCheck()`'s shape: rewrite
+  `image_path` only for rows still on the exact old placeholder path, per
+  slug, leaving stock, orders, and any admin-edited image untouched
+  ([`3661c92`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-wanghanbo73-create/commit/3661c92)).
 
 ## Verification, as it stands
 
@@ -96,7 +110,7 @@ above — a real bug caught by reading output, not by trusting the code.
 
 ## Outside the three crits
 
-Two pieces of work sit outside the Crit 9/10 cycle. First, catalogue
+Three pieces of work sit outside the Crit 9/10 cycle. First, catalogue
 artwork and two new products (Street Shorts, Cloud Slides) were added the
 same way every seed product is — appended to `SEED_PRODUCTS`, inserted via
 the existing `INSERT OR IGNORE` step, so a redeploy adds the new rows
@@ -117,6 +131,22 @@ own SSE parsing for the different streaming/tool-call-fragment format. This
 is additive to the brief, not a substitute for any of its three required
 properties (multi-user, real-time, persists), which the storefront flows
 above already satisfy independently of it.
+
+Third, the storefront's visual design was reworked to match a Stitch-generated
+mockup — a forest-green/terracotta/linen palette, a Hanken Grotesk + Inter
+typeface pairing, and a restructured hero mosaic, product-card, and badge
+layout — with every piece of the mockup that implied functionality the app
+doesn't have (a search bar, a cart icon, fabricated marketing stats, a
+newsletter bar) deliberately left out rather than faked. The 10 catalogue
+products' placeholder SVG art was replaced with real product photography
+sourced from the mockup's own embedded reference images, each one visually
+checked before use rather than trusted on the strength of its URL or
+`data-alt` description
+([`7e1b568`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-wanghanbo73-create/commit/7e1b568)).
+The AI chat assistant also gained an order-detail lookup tool, re-using the
+same ownership check as `GET /orders/:id` (not-found and not-mine return the
+identical shape), and a server-side return-policy string so the model states
+official wording verbatim instead of improvising one.
 
 ## What's still mine to do by hand
 
