@@ -104,13 +104,19 @@ without touching existing stock or orders
 ([`4a5e1aa`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-wanghanbo73-create/commit/4a5e1aa)).
 Second, an AI customer-service widget: a floating chat panel, mounted once
 in `layout()` for every signed-in page, backed by `POST /ai-chat/stream`.
-It runs a local Ollama model in development and the Anthropic API in
-production behind one `AI_BACKEND`-switched interface, because the
-production Fly machine's 256 MB budget can't host a local model — this
-follows the same "the deploy shape decides the architecture" reasoning as
-ADR 0001. This is additive to the brief, not a substitute for any of its
-three required properties (multi-user, real-time, persists), which the
-storefront flows above already satisfy independently of it.
+It runs a local Ollama model in development and a hosted API in production
+behind one `AI_BACKEND`-switched interface, because the production Fly
+machine's 256 MB budget can't host a local model — this follows the same
+"the deploy shape decides the architecture" reasoning as ADR 0001.
+Production currently runs DeepSeek rather than Anthropic, added in
+[`d86b480`](https://github.com/comp4020-agentic-coding-studio/comp4020-final-wanghanbo73-create/commit/d86b480)
+once it turned out an Anthropic key wasn't available but a DeepSeek one
+was — DeepSeek's API is OpenAI-compatible, so the branch reuses the same
+tool definitions and tool-execution helpers as the Ollama branch, with its
+own SSE parsing for the different streaming/tool-call-fragment format. This
+is additive to the brief, not a substitute for any of its three required
+properties (multi-user, real-time, persists), which the storefront flows
+above already satisfy independently of it.
 
 ## What's still mine to do by hand
 
