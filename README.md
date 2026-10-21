@@ -26,9 +26,10 @@ below double as the table of contents a marker reads there.
 - **AI customer service.** A small floating widget, available on every page
   once signed in, answers catalogue/order questions over a streamed
   `/ai-chat/stream` response. It runs against a local Ollama model (`qwen2.5`)
-  in development and the Anthropic API in production, switched by the
-  `AI_BACKEND` env var — the 256 MB Fly machine can't host a local model, so
-  the two backends share one interface rather than one replacing the other.
+  in development and a hosted API (DeepSeek or Anthropic) in production,
+  switched by the `AI_BACKEND` env var — the 256 MB Fly machine can't host a
+  local model, so all backends share one interface rather than one replacing
+  another.
 
 ## Tech stack
 

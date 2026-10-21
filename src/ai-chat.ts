@@ -20,9 +20,17 @@ orders, change orders, or access any other customer's data.`;
 // nobody needs an API key to try the feature; deploying with AI_BACKEND=anthropic
 // (and ANTHROPIC_API_KEY as a Fly secret) switches to the hosted API instead —
 // the 256MB Fly machine has no room to run a local model.
-const BACKEND = process.env.AI_BACKEND === "anthropic" ? "anthropic" : "ollama";
+const BACKEND =
+  process.env.AI_BACKEND === "anthropic"
+    ? "anthropic"
+    : process.env.AI_BACKEND === "deepseek"
+      ? "deepseek"
+      : "ollama";
 const OLLAMA_BASE_URL = process.env.OLLAMA_BASE_URL ?? "http://localhost:11434";
 const OLLAMA_MODEL = process.env.OLLAMA_MODEL ?? "qwen2.5:1.5b";
+const DEEPSEEK_BASE_URL = "https://api.deepseek.com";
+const DEEPSEEK_MODEL = process.env.DEEPSEEK_MODEL ?? "deepseek-chat";
+const DEEPSEEK_API_KEY = process.env.DEEPSEEK_API_KEY;
 
 const anthropicClient =
   BACKEND === "anthropic" && process.env.ANTHROPIC_API_KEY ? new Anthropic() : null;
@@ -44,14 +52,20 @@ async function checkOllamaAvailable(): Promise<boolean> {
 
 if (BACKEND === "ollama") {
   void checkOllamaAvailable();
-} else if (!anthropicClient) {
+} else if (BACKEND === "anthropic" && !anthropicClient) {
   console.warn(
     "[ai-chat] AI_BACKEND=anthropic but ANTHROPIC_API_KEY not set — the AI customer service chat will report itself as unavailable",
+  );
+} else if (BACKEND === "deepseek" && !DEEPSEEK_API_KEY) {
+  console.warn(
+    "[ai-chat] AI_BACKEND=deepseek but DEEPSEEK_API_KEY not set — the AI customer service chat will report itself as unavailable",
   );
 }
 
 export function isChatAvailable(): boolean {
-  return BACKEND === "anthropic" ? anthropicClient !== null : ollamaAvailable;
+  if (BACKEND === "anthropic") return anthropicClient !== null;
+  if (BACKEND === "deepseek") return Boolean(DEEPSEEK_API_KEY);
+  return ollamaAvailable;
 }
 
 export interface ChatHistoryEntry {
@@ -350,6 +364,144 @@ async function streamChatReplyOllama(
   return { toolCalls: toolCallCount, outputChars };
 }
 
+interface OpenAiToolCall {
+  index: number;
+  id?: string;
+  function?: { name?: string; arguments?: string };
+}
+
+interface OpenAiChatChunk {
+  choices?: Array<{
+    delta?: { content?: string; tool_calls?: OpenAiToolCall[] };
+    finish_reason?: string | null;
+  }>;
+}
+
+interface OpenAiMessage {
+  role: "system" | "user" | "assistant" | "tool";
+  content: string;
+  tool_calls?: Array<{ id: string; type: "function"; function: { name: string; arguments: string } }>;
+  tool_call_id?: string;
+}
+
+// DeepSeek's API is OpenAI-compatible SSE: `data: {...}\n\n` frames terminated by
+// `data: [DONE]`, with tool-call arguments arriving as string fragments keyed by
+// `index` that have to be concatenated before the whole thing is valid JSON —
+// unlike Ollama's native API, which hands back each tool call whole.
+async function readOpenAiStream(
+  body: ReadableStream<Uint8Array>,
+  res: Response,
+  onText: (delta: string) => void,
+): Promise<{ toolCalls: Array<{ id: string; name: string; arguments: string }>; assistantContent: string }> {
+  const reader = body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let assistantContent = "";
+  const toolCallsByIndex = new Map<number, { id: string; name: string; arguments: string }>();
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split("\n");
+    buffer = lines.pop() ?? "";
+    for (const line of lines) {
+      const trimmed = line.trim();
+      if (!trimmed.startsWith("data:")) continue;
+      const data = trimmed.slice("data:".length).trim();
+      if (data === "[DONE]") continue;
+      const chunk = JSON.parse(data) as OpenAiChatChunk;
+      const delta = chunk.choices?.[0]?.delta;
+      if (delta?.content) {
+        assistantContent += delta.content;
+        res.write(delta.content);
+        onText(delta.content);
+      }
+      for (const call of delta?.tool_calls ?? []) {
+        const existing = toolCallsByIndex.get(call.index) ?? { id: "", name: "", arguments: "" };
+        if (call.id) existing.id = call.id;
+        if (call.function?.name) existing.name += call.function.name;
+        if (call.function?.arguments) existing.arguments += call.function.arguments;
+        toolCallsByIndex.set(call.index, existing);
+      }
+    }
+  }
+
+  return { toolCalls: [...toolCallsByIndex.values()], assistantContent };
+}
+
+async function streamChatReplyDeepSeek(
+  user: SessionUser,
+  history: unknown,
+  message: string,
+  res: Response,
+): Promise<StreamChatResult> {
+  if (!DEEPSEEK_API_KEY) {
+    res.write("Sorry — the AI customer service assistant isn't configured right now. Please try again later.");
+    return { toolCalls: 0, outputChars: 0 };
+  }
+
+  const messages: OpenAiMessage[] = [
+    { role: "system", content: SYSTEM_PROMPT },
+    ...sanitizeHistory(history).map((entry) => ({ role: entry.role, content: entry.content })),
+    { role: "user", content: message },
+  ];
+
+  let toolCallCount = 0;
+  let outputChars = 0;
+
+  for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+    const response = await fetch(new URL("/chat/completions", DEEPSEEK_BASE_URL), {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        Authorization: `Bearer ${DEEPSEEK_API_KEY}`,
+      },
+      body: JSON.stringify({
+        model: DEEPSEEK_MODEL,
+        messages,
+        tools: ollamaTools,
+        stream: true,
+        max_tokens: MAX_TOKENS,
+      }),
+    });
+
+    if (!response.ok || !response.body) {
+      res.write("\n\n[Sorry, the AI customer service assistant isn't responding right now.]");
+      break;
+    }
+
+    const { toolCalls, assistantContent } = await readOpenAiStream(response.body, res, (delta) => {
+      outputChars += delta.length;
+    });
+
+    if (toolCalls.length === 0) break;
+
+    messages.push({
+      role: "assistant",
+      content: assistantContent,
+      tool_calls: toolCalls.map((call) => ({
+        id: call.id,
+        type: "function",
+        function: { name: call.name, arguments: call.arguments },
+      })),
+    });
+    for (const call of toolCalls) {
+      toolCallCount++;
+      const result = runTool(call.name, JSON.parse(call.arguments || "{}"), user);
+      messages.push({ role: "tool", tool_call_id: call.id, content: JSON.stringify(result) });
+    }
+  }
+
+  if (outputChars === 0) {
+    const fallback = "Sorry, I couldn't come up with an answer to that. Could you rephrase your question?";
+    res.write(fallback);
+    outputChars = fallback.length;
+  }
+
+  return { toolCalls: toolCallCount, outputChars };
+}
+
 // Streams the assistant's reply text directly onto `res` as plain chunks,
 // running the tool-use loop server-side in between. The client never sees
 // tool_use/tool_result blocks — only the final narrated text.
@@ -359,7 +511,7 @@ export async function streamChatReply(
   message: string,
   res: Response,
 ): Promise<StreamChatResult> {
-  return BACKEND === "anthropic"
-    ? streamChatReplyAnthropic(user, history, message, res)
-    : streamChatReplyOllama(user, history, message, res);
+  if (BACKEND === "anthropic") return streamChatReplyAnthropic(user, history, message, res);
+  if (BACKEND === "deepseek") return streamChatReplyDeepSeek(user, history, message, res);
+  return streamChatReplyOllama(user, history, message, res);
 }
