@@ -68,6 +68,7 @@ catalogRouter.get("/products/:slug", (req, res) => {
       title: product.name,
       user: req.session.user,
       csrfToken: csrfToken(req),
+      watchingProductId: product.sale_type === "limited" ? product.id : undefined,
       body: productPage({ product, skus, isLive }),
     }),
   );

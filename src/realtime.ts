@@ -20,6 +20,30 @@ export function subscribe(channel: string, res: Response): () => void {
   };
 }
 
+// Anonymous, aggregate-only watcher counts per drop (see
+// docs/adr/0004-drop-urgency-signals.md for why this is in scope where
+// per-user presence was not). No identity is ever stored — just a count per
+// product id, incremented/decremented as /events connections join and leave.
+const watcherCounts = new Map<number, number>();
+
+export function watcherCount(productId: number): number {
+  return watcherCounts.get(productId) ?? 0;
+}
+
+export function joinWatchers(productId: number): () => void {
+  watcherCounts.set(productId, watcherCount(productId) + 1);
+  publish("catalog", "watchers", { productId, count: watcherCount(productId) });
+  return () => {
+    const next = Math.max(0, watcherCount(productId) - 1);
+    if (next === 0) {
+      watcherCounts.delete(productId);
+    } else {
+      watcherCounts.set(productId, next);
+    }
+    publish("catalog", "watchers", { productId, count: next });
+  };
+}
+
 export function publish(channel: string, type: string, data: unknown): void {
   const subscribers = channels.get(channel);
   if (!subscribers || subscribers.size === 0) return;

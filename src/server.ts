@@ -14,6 +14,7 @@ import { aiChatRouter } from "./routes/ai-chat.ts";
 import { adminRouter } from "./routes/admin.ts";
 import { readmeRouter } from "./routes/readme.ts";
 import { eventsRouter } from "./routes/events.ts";
+import { startDropWatcher } from "./drop-watcher.ts";
 import { layout } from "./views/layout.ts";
 
 const app = express();
@@ -103,6 +104,8 @@ app.use((req, res) => {
     }),
   );
 });
+
+startDropWatcher();
 
 const port = Number(process.env.PORT) || 8080;
 app.listen(port, "0.0.0.0", () => {

@@ -118,6 +118,45 @@
     }
   }
 
+  function patchProductLive(productId) {
+    document.querySelectorAll('[data-product-id="' + productId + '"]').forEach(function (el) {
+      var badge = el.querySelector(".badge--pending");
+      if (badge) {
+        badge.textContent = "Live now";
+        badge.className = "badge badge--live";
+      }
+      var pendingNotice = el.querySelector(".notice--pending");
+      if (pendingNotice) {
+        pendingNotice.textContent = "Live now";
+        pendingNotice.className = "notice notice--success";
+      }
+      if (!el.classList.contains("product-detail")) return;
+      var errorNotice = el.querySelector(".notice.notice--error");
+      if (errorNotice && /not available/i.test(errorNotice.textContent)) {
+        errorNotice.remove();
+      }
+      var select = el.querySelector("select");
+      var qty = el.querySelector('input[name="qty"]');
+      var button = el.querySelector("[data-buy-button]");
+      if (select) select.disabled = false;
+      if (qty) qty.disabled = false;
+      if (button) {
+        button.removeAttribute("data-force-disabled");
+        updateProductSoldOut(el);
+      }
+    });
+  }
+
+  function patchWatchers(productId, count) {
+    document.querySelectorAll('[data-product-id="' + productId + '"]').forEach(function (el) {
+      var target = el.querySelector("[data-watchers]");
+      if (!target) return;
+      target.textContent =
+        count === 1 ? "1 person viewing this drop" : count + " people viewing this drop";
+      target.style.display = count > 0 ? "" : "none";
+    });
+  }
+
   function handleNewOrder(data) {
     var body = document.getElementById("admin-orders-body");
     if (!body || body.querySelector('[data-order-id="' + data.orderId + '"]')) return;
@@ -167,7 +206,17 @@
   }
 
   if (typeof EventSource === "undefined") return;
-  var es = new EventSource("/events");
+
+  // Limited-product pages declare which drop they're on via a data
+  // attribute on <body>; this joins that product's anonymous watcher count
+  // for the lifetime of the connection (see
+  // docs/adr/0004-drop-urgency-signals.md). Regular pages omit the param
+  // and nothing watcher-related ever fires for them.
+  var watchingProductId = document.body.getAttribute("data-watching-product-id");
+  var eventsUrl = watchingProductId
+    ? "/events?watching=" + encodeURIComponent(watchingProductId)
+    : "/events";
+  var es = new EventSource(eventsUrl);
 
   es.addEventListener("stock", function (e) {
     var data = JSON.parse(e.data);
@@ -187,6 +236,14 @@
   });
   es.addEventListener("new_order", function (e) {
     handleNewOrder(JSON.parse(e.data));
+  });
+  es.addEventListener("product_live", function (e) {
+    var data = JSON.parse(e.data);
+    patchProductLive(data.productId);
+  });
+  es.addEventListener("watchers", function (e) {
+    var data = JSON.parse(e.data);
+    patchWatchers(data.productId, data.count);
   });
   es.onopen = resync;
 })();

@@ -52,6 +52,10 @@ export function productPage({ product, skus, isLive }: ProductPageOptions): stri
       <p>${escapeHtml(product.description)}</p>
       ${limitedNotice}
       ${when(!isLive, `<p class="notice notice--error">This item is not available for purchase yet.</p>`)}
+      ${when(
+        product.sale_type === "limited",
+        `<p class="notice notice--watchers" data-watchers style="display:none" aria-live="polite"></p>`,
+      )}
       <div data-availability-notice></div>
       <form method="get" action="/checkout" class="purchase-form" data-purchase-form>
         <div class="field">

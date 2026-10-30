@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { db } from "../db.ts";
-import { subscribe } from "../realtime.ts";
+import { joinWatchers, subscribe } from "../realtime.ts";
 import type { OrderRow, SkuRow } from "../types.ts";
 
 export const eventsRouter = Router();
@@ -21,6 +21,17 @@ eventsRouter.get("/events", (req, res) => {
     if (user.role === "admin") {
       unsubscribers.push(subscribe("admin", res));
     }
+  }
+
+  // Anonymous watcher count for a drop page (see
+  // docs/adr/0004-drop-urgency-signals.md). Only a product id is ever read
+  // here — no identity is attached to the count. joinWatchers publishes the
+  // updated count to "catalog" immediately, which this connection is
+  // already subscribed to above, so it sees its own join without a separate
+  // write here.
+  const watchingParam = Number(req.query.watching);
+  if (Number.isInteger(watchingParam) && watchingParam > 0) {
+    unsubscribers.push(joinWatchers(watchingParam));
   }
 
   req.on("close", () => {

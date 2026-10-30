@@ -9,9 +9,12 @@ export interface LayoutOptions {
   user?: SessionUser;
   csrfToken?: string;
   body: string;
+  // Set on a limited-product's detail page only, so public/realtime.js can
+  // join that drop's anonymous watcher count (docs/adr/0004-drop-urgency-signals.md).
+  watchingProductId?: number;
 }
 
-export function layout({ title, user, csrfToken, body }: LayoutOptions): string {
+export function layout({ title, user, csrfToken, body, watchingProductId }: LayoutOptions): string {
   const unreadCount = user ? getUnreadCount(user.id) : 0;
   return `<!doctype html>
 <html lang="en">
@@ -27,7 +30,7 @@ export function layout({ title, user, csrfToken, body }: LayoutOptions): string 
   />
   <link rel="stylesheet" href="/styles.css" />
 </head>
-<body>
+<body${watchingProductId ? ` data-watching-product-id="${watchingProductId}"` : ""}>
   <a class="skip-link" href="#main">Skip to content</a>
   <header class="site-header">
     <div class="site-header__inner">

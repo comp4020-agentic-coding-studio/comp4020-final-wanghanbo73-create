@@ -17,19 +17,20 @@ export function limitedPage(products: ProductRow[], now: number): string {
               const badge = `<span class="badge ${isLive ? "badge--live" : "badge--pending"}">${
                 isLive ? "Live now" : "Upcoming"
               }</span>`;
-              return `<li class="product-card" data-category="${escapeHtml(p.category)}">
+              return `<li class="product-card" data-category="${escapeHtml(p.category)}" data-product-id="${p.id}">
                 <a href="/products/${encodeURIComponent(p.slug)}">
                   <div class="product-card__image-wrap">
                     <img src="${escapeHtml(p.image_path)}" alt="" class="product-card__image" width="320" height="240" />
                     <div class="badge-row">${badge}</div>
                   </div>
                   <p class="product-card__category">${escapeHtml(p.category)}</p>
-                  <h3>${escapeHtml(p.name)}</h3>
+                  <h3 data-product-name>${escapeHtml(p.name)}</h3>
                   <p class="product-card__price product-card__price--limited">${money(p.price_cents)}</p>
                   <p class="notice ${isLive ? "notice--success" : "notice--pending"}">
                     ${isLive ? "Live now" : `Releases ${escapeHtml(p.release_at ?? "")}`}
                   </p>
                   ${when(p.per_account_limit, `<p>Limit ${p.per_account_limit} per account</p>`)}
+                  <p class="notice notice--watchers" data-watchers style="display:none" aria-live="polite"></p>
                 </a>
               </li>`;
             })
