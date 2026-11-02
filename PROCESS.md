@@ -259,10 +259,27 @@ guarantees a concurrency-specific demo and test scoped to a live drop, in
 addition to the generic last-unit race already covered by
 `spec/inventory.test.ts`.
 
-## What's still mine to do by hand
+## Live verification on the deployed app
 
-The Crit 9 multi-tab verification (buy-down-to-sold-out reflected live in a
-second tab; admin status change reflected on an open customer order page)
-and the real two-Chrome-profile run for Crit 10 — narrated live rather than
-via the cookie-jar substitute above — still need to happen in person before
-submission.
+Two checks in this section had previously only been exercised through the
+cookie-jar substitute described above; both were re-run by hand, in person,
+against the deployed Fly instance, before submission.
+
+**Multi-tab (Crit 9).** Two browser tabs open on the same product's
+`/products/:slug` page: buying down to the last unit in one tab flipped the
+other tab to SOLD OUT with no reload. Separately, a customer's `/orders/:id`
+page left open while an admin changed that order's status in `/admin`
+updated live, with no reload, in the customer's tab.
+
+**Two independent browser identities (Crit 10).** Run with two separate
+browser profiles rather than the cookie-jar substitute, with `flyctl logs`
+tailed throughout: two accounts registered and signed in independently with
+no cross-contamination between sessions; account B given account A's order
+ID directly in the URL bar (`/orders/<A's id>`) got "order not found" rather
+than A's order contents or a permission-revealing error — the same 404
+`/orders/:id` already returns for a nonexistent ID, so the response gives
+nothing away about whether the ID exists; account B hitting `/admin/products`
+got a 403. The live log tail attributed each request's path and actor
+correctly throughout, including the `/admin/products` case the
+`req.originalUrl` fix above was for — no recurrence of the path-rewriting bug
+it fixed.
