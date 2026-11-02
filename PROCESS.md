@@ -259,6 +259,19 @@ guarantees a concurrency-specific demo and test scoped to a live drop, in
 addition to the generic last-unit race already covered by
 `spec/inventory.test.ts`.
 
+## Grounding the business case in a specific scenario
+
+Tutor feedback also asked for a story about the users and the brand, not just
+an argument for why the architecture is correct in the abstract. README.md
+now opens with one: a specific drop (400 pairs, Friday 6pm, no restock) and
+the two concrete failures a page-builder storefront produced on a previous
+drop — a 30-unit oversell from an unsynchronised "2 left" read, and a missed
+release window because nothing signalled the moment it went live — framed as
+what the owner is actually paying to avoid, not a hypothetical. The existing
+technical argument (SQLite's single connection as the one queueing server,
+watcher counts and drop-live push making that queue visible) now sits
+downstream of that scenario rather than standing alone.
+
 ## Live verification on the deployed app
 
 Two checks in this section had previously only been exercised through the

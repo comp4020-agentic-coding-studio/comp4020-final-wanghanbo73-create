@@ -16,6 +16,37 @@ somewhere behind the scenes. This page is rendered from `README.md` at
 `/readme/` on the running app, so the headings below double as the table of
 contents a marker reads there.
 
+## Why a drop brand specifically needs this
+
+Picture the actual pitch meeting this app is built to survive. Fieldmark's
+owner has 400 pairs of a collaboration sneaker, the "Hi-Top Collab," and one
+shot at selling them: release at 6:00pm Friday, first come first served, no
+restock. Their last platform — a page-builder storefront with a plain "add to
+cart" button — handled this badly twice. The first drop oversold by 30 pairs
+because two checkouts could both read "2 left" and both succeed; the owner
+spent the next week manually refunding furious customers and lost three of
+them to a reseller site for good. The second drop undersold, because nothing
+on the page told the 600 people refreshing at 5:59pm that the button was
+about to go live, so half of them missed the window entirely and blamed the
+site, not their own timing. Neither failure is a cosmetic bug — both are the
+owner's actual business: 400 units at full margin, once, with a customer base
+that's watching for exactly these two things to go wrong again.
+
+That's the meeting this app is the answer to. Not "can you build me a
+website that sells shoes" — any storefront does that — but "can you prove,
+live, that 400 units sold to a crowd hitting Buy in the same ten seconds
+will never resolve to 401 orders, and that the room can see the drop go live
+the instant it does, not five seconds late on whoever happens to refresh."
+`scripts/simulate-drop-rush.ts` is built to run in that meeting: point it at
+the live `/limited` page with a drop about to unlock, watch the watcher
+count climb as the room fills up, watch the drop flip live with no reload,
+then fire fifty concurrent buyers at the last ten pairs and watch
+`/admin`'s order queue and the product's stock count settle at exactly ten
+orders, zero oversold, while every rejected buyer still gets a clear "sold
+out" rather than a stuck request or a silent failure. That demo — not a
+slide claiming the architecture is race-safe — is what should close the deal
+with an owner who has already been burned once.
+
 ## What it does
 
 - **Catalogue.** `/` lists regular, always-in-stock products; `/limited`
